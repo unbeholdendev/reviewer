@@ -1,0 +1,13 @@
+{
+  "name": "reviewer",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "hono": "^4.13.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}
