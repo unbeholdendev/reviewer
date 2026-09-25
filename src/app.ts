@@ -5,10 +5,11 @@ import { verify } from "./signature";
 
 export type PR = { owner: string; repo: string; number: number };
 export type Review = { summary: string; recommendation: "blocking" | "nits" | "looks-good" };
+export type Checkout = { dir: string; diff: string; log: string };
 export type Adapters = {
   forgejo: { createReview(pr: PR, review: { event: "COMMENT"; body: string }): Promise<void> };
-  git: object;
-  claude: { review(pr: PR): Promise<Review> };
+  git: { checkout(pr: PR, base: string, head: string): Promise<Checkout>; remove(checkout: Checkout): Promise<void> };
+  claude: { review(pr: PR, checkout: Checkout): Promise<Review> };
 };
 
 export function createApp(adapters: Adapters) {
@@ -36,15 +37,21 @@ export function createApp(adapters: Adapters) {
 const PullRequestEvent = z.object({
   action: z.string(),
   number: z.number(),
+  pull_request: z.object({ base: z.object({ sha: z.string() }), head: z.object({ sha: z.string() }) }),
   repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
 });
 
-async function handle({ forgejo, claude }: Adapters, event: string | undefined, payload: unknown) {
+async function handle({ forgejo, git, claude }: Adapters, event: string | undefined, payload: unknown) {
   if (event !== "pull_request") return;
   const parsed = PullRequestEvent.safeParse(payload);
   if (!parsed.success || !["opened", "reopened"].includes(parsed.data.action)) return;
-  const { number, repository } = parsed.data;
+  const { number, pull_request, repository } = parsed.data;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
-  const { summary, recommendation } = await claude.review(pr);
-  await forgejo.createReview(pr, { event: "COMMENT", body: `**Recommendation:** ${recommendation}\n\n${summary}` });
+  const checkout = await git.checkout(pr, pull_request.base.sha, pull_request.head.sha);
+  try {
+    const { summary, recommendation } = await claude.review(pr, checkout);
+    await forgejo.createReview(pr, { event: "COMMENT", body: `**Recommendation:** ${recommendation}\n\n${summary}` });
+  } finally {
+    await git.remove(checkout);
+  }
 }

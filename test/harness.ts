@@ -17,7 +17,8 @@ export function setup(returns: Record<string, unknown> = {}) {
             ? undefined
             : (...args: unknown[]) => {
                 calls.push({ adapter, method: String(method), args });
-                return returns[`${adapter}.${String(method)}`];
+                const r = returns[`${adapter}.${String(method)}`];
+                return typeof r === "function" ? r(...args) : r;
               },
       },
     );
