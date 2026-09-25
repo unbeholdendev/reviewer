@@ -5,15 +5,20 @@ import { createApp } from "../src/app";
 
 type Call = { adapter: string; method: string; args: unknown[] };
 
-export function setup() {
+export function setup(returns: Record<string, unknown> = {}) {
   const calls: Call[] = [];
-  const fake = (adapter: string) =>
+  const fake = (adapter: string): any =>
     new Proxy(
       {},
       {
         // not thenable, so awaiting an adapter doesn't record a call
         get: (_, method) =>
-          method === "then" ? undefined : (...args: unknown[]) => void calls.push({ adapter, method: String(method), args }),
+          method === "then"
+            ? undefined
+            : (...args: unknown[]) => {
+                calls.push({ adapter, method: String(method), args });
+                return returns[`${adapter}.${String(method)}`];
+              },
       },
     );
   const app = createApp({ forgejo: fake("forgejo"), git: fake("git"), claude: fake("claude") });

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { send, setup, sign } from "./harness";
-
-const payload = { action: "opened", number: 1 };
+import payload from "./fixtures/pull_request.opened.json";
 
 test("missing signature is rejected and runs no job", async () => {
   const { app, calls } = setup();
@@ -20,7 +19,7 @@ test("wrong signature is rejected and runs no job", async () => {
 });
 
 test("valid signature is accepted", async () => {
-  const { app } = setup();
+  const { app } = setup({ "claude.review": { summary: "", recommendation: "looks-good" } });
   const res = await send(app, "pull_request", payload);
   expect(res.status).toBe(200);
   await app.idle();
