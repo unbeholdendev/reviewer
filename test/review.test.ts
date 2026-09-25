@@ -90,6 +90,38 @@ test("comments on diff lines go inline, others move into the summary", async () 
   });
 });
 
+test("lockfiles and vendored files are not reviewed and get no comments", async () => {
+  const section = (path: string) =>
+    [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, "@@ -1 +1 @@", "-old", "+new"].join("\n");
+  const kept = section("src/a.ts");
+  const diff = [
+    section("bun.lock"),
+    kept,
+    section("web/package-lock.json"),
+    section("yarn.lock"),
+    section("pnpm-lock.yaml"),
+    section("Cargo.lock"),
+    section("go.sum"),
+    section("vendor/lib/x.go"),
+    section("web/node_modules/y/index.js"),
+    'diff --git "a/caf\\303\\251/yarn.lock" "b/caf\\303\\251/yarn.lock"\n@@ -1 +1 @@\n-old\n+new',
+  ].join("\n");
+  const comments = [
+    { path: "src/a.ts", line: 1, side: "RIGHT", body: "Real.", severity: "nit" },
+    { path: "bun.lock", line: 1, side: "RIGHT", body: "Lock.", severity: "nit" },
+    { path: "vendor/lib/x.go", line: 1, side: "RIGHT", body: "Vendored.", severity: "nit" },
+  ];
+  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": { ...review, comments } });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toEqual({ ...checkout, diff: `${kept}\n` });
+  expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toEqual({
+    event: "COMMENT",
+    body: "**Recommendation:** nits\n\nAdds a signed webhook route.",
+    comments: [{ path: "src/a.ts", new_position: 1, body: "**nit:** Real." }],
+  });
+});
+
 test("a PR payload that fails validation runs no job", async () => {
   const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
   await send(app, "pull_request", { ...opened, repository: { name: "reviewer" } });

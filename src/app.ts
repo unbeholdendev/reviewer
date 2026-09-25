@@ -51,8 +51,13 @@ async function handle({ forgejo, git, claude }: Adapters, event: string | undefi
   const pr = { owner: repository.owner.login, repo: repository.name, number };
   const checkout = await git.checkout(pr, pull_request.base.sha, pull_request.head.sha);
   try {
-    const { summary, recommendation, comments } = await claude.review(pr, checkout);
-    const lines = anchorable(checkout.diff);
+    const diff = checkout.diff
+      .split(/^(?=diff --git )/m)
+      .filter((s) => !skipped(s.match(/^diff --git .* "?b\/(.*?)"?$/m)?.[1] ?? ""))
+      .join("");
+    const { summary, recommendation, comments: all } = await claude.review(pr, { ...checkout, diff });
+    const comments = all.filter((c) => !skipped(c.path));
+    const lines = anchorable(diff);
     const inline = comments.filter((c) => lines.has(`${c.side} ${c.path}:${c.line}`));
     const outside = comments.filter((c) => !inline.includes(c));
     let body = `**Recommendation:** ${recommendation}\n\n${summary}`;
@@ -70,6 +75,14 @@ async function handle({ forgejo, git, claude }: Adapters, event: string | undefi
   } finally {
     await git.remove(checkout);
   }
+}
+
+const lockfiles =
+  /(^|\/)(bun\.lockb?|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|go\.sum|poetry\.lock|uv\.lock|Pipfile\.lock|composer\.lock|Gemfile\.lock|flake\.lock|mix\.lock|pubspec\.lock|Podfile\.lock|packages\.lock\.json)$/;
+const vendored = /(^|\/)(vendor|node_modules|third_party)\//;
+
+function skipped(path: string) {
+  return lockfiles.test(path) || vendored.test(path);
 }
 
 // Forgejo only anchors comments on lines shown in a hunk
