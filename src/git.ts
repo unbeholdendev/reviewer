@@ -41,9 +41,12 @@ export const git: Adapters["git"] = {
       await run("-C", mirror, "worktree", "prune");
       const diff = await run("-C", mirror, "diff", `${base}...${head}`);
       const log = await run("-C", mirror, "log", `${base}..${head}`);
+      const rules = await Promise.all(
+        ["REVIEW.md", "CLAUDE.md"].map((f) => run("-C", mirror, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
+      );
       const dir = join(root, "worktrees", randomUUID());
       await run("-C", mirror, "worktree", "add", "--detach", dir, head);
-      return { dir, diff, log };
+      return { dir, diff, log, rules: rules.filter(Boolean).join("\n") };
     });
   },
 

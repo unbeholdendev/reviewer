@@ -4,7 +4,7 @@ import opened from "./fixtures/pull_request.opened.json";
 
 const review = { summary: "Adds a signed webhook route.", recommendation: "nits" };
 const pr = { owner: "pycan", repo: "reviewer", number: 27 };
-const checkout = { dir: "/wt", diff: "", log: "" };
+const checkout = { dir: "/wt", diff: "", log: "", rules: "" };
 
 test("an opened PR gets a COMMENT review with the summary and recommendation", async () => {
   const { app, calls } = setup({ "claude.review": review });

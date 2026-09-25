@@ -5,7 +5,7 @@ import { verify } from "./signature";
 
 export type PR = { owner: string; repo: string; number: number };
 export type Review = { summary: string; recommendation: "blocking" | "nits" | "looks-good" };
-export type Checkout = { dir: string; diff: string; log: string };
+export type Checkout = { dir: string; diff: string; log: string; rules: string };
 export type Adapters = {
   forgejo: { createReview(pr: PR, review: { event: "COMMENT"; body: string }): Promise<void> };
   git: { checkout(pr: PR, base: string, head: string): Promise<Checkout>; remove(checkout: Checkout): Promise<void> };
