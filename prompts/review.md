@@ -13,5 +13,11 @@ Skip style points a formatter or linter would catch.
 
 Return:
 
-- `summary`: what the PR does in one or two sentences, then your findings as a short Markdown list, most important first. Name the file and line for each one.
+- `summary`: what the PR does in one or two sentences, then any findings that don't belong on one line.
+- `comments`: one per finding on a line, most important first.
+  - `path`: file path from the repository root, without the diff's `a/` or `b/` prefix
+  - `line`: line number in that file
+  - `side`: `RIGHT` for a line in the new code, `LEFT` for a removed line
+  - `body`: the finding, short
+  - `severity`: `blocking` if it should not merge as is, else `nit`
 - `recommendation`: `blocking` if it should not merge as is, `nits` if only small fixes are left, `looks-good` if there is nothing to fix.

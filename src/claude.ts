@@ -3,7 +3,19 @@ import type { Adapters } from "./app";
 import { CLAUDE_CODE_OAUTH_TOKEN } from "./env";
 
 const instructions = await Bun.file(new URL("../prompts/review.md", import.meta.url)).text();
-const Review = z.object({ summary: z.string(), recommendation: z.enum(["blocking", "nits", "looks-good"]) });
+const Review = z.object({
+  summary: z.string(),
+  recommendation: z.enum(["blocking", "nits", "looks-good"]),
+  comments: z.array(
+    z.object({
+      path: z.string(),
+      line: z.number().int(),
+      side: z.enum(["LEFT", "RIGHT"]),
+      body: z.string(),
+      severity: z.enum(["blocking", "nit"]),
+    }),
+  ),
+});
 const Output = z.object({ structured_output: Review });
 
 // --safe-mode stops Claude loading CLAUDE.md, settings, hooks and skills from the PR head

@@ -19,7 +19,7 @@ test("wrong signature is rejected and runs no job", async () => {
 });
 
 test("valid signature is accepted", async () => {
-  const { app } = setup({ "claude.review": { summary: "", recommendation: "looks-good" } });
+  const { app } = setup({ "git.checkout": { diff: "" }, "claude.review": { summary: "", recommendation: "looks-good", comments: [] } });
   const res = await send(app, "pull_request", payload);
   expect(res.status).toBe(200);
   await app.idle();

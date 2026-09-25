@@ -4,10 +4,12 @@ import { WEBHOOK_SECRET } from "./env";
 import { verify } from "./signature";
 
 export type PR = { owner: string; repo: string; number: number };
-export type Review = { summary: string; recommendation: "blocking" | "nits" | "looks-good" };
+export type Comment = { path: string; line: number; side: "LEFT" | "RIGHT"; body: string; severity: "blocking" | "nit" };
+export type Review = { summary: string; recommendation: "blocking" | "nits" | "looks-good"; comments: Comment[] };
+export type InlineComment = { path: string; body: string; new_position?: number; old_position?: number };
 export type Checkout = { dir: string; diff: string; log: string; rules: string };
 export type Adapters = {
-  forgejo: { createReview(pr: PR, review: { event: "COMMENT"; body: string }): Promise<void> };
+  forgejo: { createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void> };
   git: { checkout(pr: PR, base: string, head: string): Promise<Checkout>; remove(checkout: Checkout): Promise<void> };
   claude: { review(pr: PR, checkout: Checkout): Promise<Review> };
 };
@@ -49,9 +51,40 @@ async function handle({ forgejo, git, claude }: Adapters, event: string | undefi
   const pr = { owner: repository.owner.login, repo: repository.name, number };
   const checkout = await git.checkout(pr, pull_request.base.sha, pull_request.head.sha);
   try {
-    const { summary, recommendation } = await claude.review(pr, checkout);
-    await forgejo.createReview(pr, { event: "COMMENT", body: `**Recommendation:** ${recommendation}\n\n${summary}` });
+    const { summary, recommendation, comments } = await claude.review(pr, checkout);
+    const lines = anchorable(checkout.diff);
+    const inline = comments.filter((c) => lines.has(`${c.side} ${c.path}:${c.line}`));
+    const outside = comments.filter((c) => !inline.includes(c));
+    let body = `**Recommendation:** ${recommendation}\n\n${summary}`;
+    if (outside.length)
+      body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` **${c.severity}:** ${c.body}`).join("\n")}`;
+    await forgejo.createReview(pr, {
+      event: "COMMENT",
+      body,
+      comments: inline.map((c) => ({
+        path: c.path,
+        [c.side === "RIGHT" ? "new_position" : "old_position"]: c.line,
+        body: `**${c.severity}:** ${c.body}`,
+      })),
+    });
   } finally {
     await git.remove(checkout);
   }
+}
+
+// Forgejo only anchors comments on lines shown in a hunk
+function anchorable(diff: string) {
+  const lines = new Set<string>();
+  let path = "", left = 0, right = 0, inHunk = false;
+  for (const l of diff.split("\n")) {
+    const hunk = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/);
+    if (hunk) [left, right, inHunk] = [Number(hunk[1]), Number(hunk[2]), true];
+    else if (l.startsWith("diff ")) [path, inHunk] = ["", false];
+    else if (!inHunk) {
+      if (l.startsWith("--- a/") || l.startsWith("+++ b/")) path = l.slice(6);
+    } else if (l.startsWith("+")) lines.add(`RIGHT ${path}:${right++}`);
+    else if (l.startsWith("-")) lines.add(`LEFT ${path}:${left++}`);
+    else if (l.startsWith(" ")) lines.add(`LEFT ${path}:${left++}`).add(`RIGHT ${path}:${right++}`);
+  }
+  return lines;
 }
