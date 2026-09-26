@@ -40,7 +40,7 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "claude", method: "review", args: [pr, checkout, false] },
+    { adapter: "claude", method: "review", args: [checkout, false] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });
@@ -51,7 +51,7 @@ test("the checkout is removed when the review fails", async () => {
     "claude.review": () => Promise.reject(new Error("claude failed")),
   });
   await send(app, "pull_request", opened);
-  await app.idle().catch(() => {});
+  await app.idle();
   expect(calls.at(-1)).toEqual({ adapter: "git", method: "remove", args: [checkout] });
 });
 
@@ -114,7 +114,7 @@ test("lockfiles and vendored files are not reviewed and get no comments", async 
   const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": { ...review, comments } });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toEqual({ ...checkout, diff: `${kept}\n` });
+  expect(calls.find((c) => c.adapter === "claude")?.args[0]).toEqual({ ...checkout, diff: `${kept}\n` });
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toEqual({
     event: "COMMENT",
     body: "**Recommendation:** nits\n\nAdds a signed webhook route.",
@@ -151,7 +151,7 @@ test("a PR over 3000 changed lines gets a partial review with a note", async () 
   const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toBe(true);
+  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(true);
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
     body: "**Recommendation:** nits\n\nAdds a signed webhook route.\n\n_Partial review: this PR has 3001 changed lines, so only the key files were reviewed._",
   });
@@ -162,7 +162,7 @@ test("filtered files do not count towards the large-PR threshold", async () => {
   const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toBe(false);
+  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(false);
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
     body: "**Recommendation:** nits\n\nAdds a signed webhook route.",
   });

@@ -1,21 +1,8 @@
 import { z } from "zod";
-import type { Adapters } from "./app";
 import { CLAUDE_CODE_OAUTH_TOKEN } from "./env";
+import { type Claude, Review } from "./types";
 
 const instructions = await Bun.file(new URL("../prompts/review.md", import.meta.url)).text();
-const Review = z.object({
-  summary: z.string(),
-  recommendation: z.enum(["blocking", "nits", "looks-good"]),
-  comments: z.array(
-    z.object({
-      path: z.string(),
-      line: z.number().int(),
-      side: z.enum(["LEFT", "RIGHT"]),
-      body: z.string(),
-      severity: z.enum(["blocking", "nit"]),
-    }),
-  ),
-});
 const Output = z.object({ structured_output: Review });
 
 // --safe-mode stops Claude loading CLAUDE.md, settings, hooks and skills from the PR head
@@ -28,8 +15,8 @@ const args = [
   "--json-schema", JSON.stringify(z.toJSONSchema(Review, { target: "draft-7" })),
 ];
 
-export const claude: Adapters["claude"] = {
-  async review(_pr, { dir, diff, log, rules }, large) {
+export const claude: Claude = {
+  async review({ dir, diff, log, rules }, large) {
     const prompt = `${instructions}\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff${large ? " (large PR)" : ""}\n\n${diff}`;
     const proc = Bun.spawn(args, {
       cwd: dir,

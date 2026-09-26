@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Adapters } from "./app";
 import { FORGEJO_TOKEN, FORGEJO_URL } from "./env";
+import type { Git } from "./types";
 
 const root = join(tmpdir(), "reviewer");
 const locks = new Map<string, Promise<unknown>>();
@@ -32,7 +32,7 @@ function locked<T>(mirror: string, fn: () => Promise<T>) {
   return next;
 }
 
-export const git: Adapters["git"] = {
+export const git: Git = {
   checkout({ owner, repo }, base, head) {
     const mirror = join(root, "mirrors", owner, `${repo}.git`);
     return locked(mirror, async () => {
