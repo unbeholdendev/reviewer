@@ -20,7 +20,7 @@ export type PR = { owner: string; repo: string; number: number };
 export type Checkout = { dir: string; diff: string; log: string; rules: string };
 export type InlineComment = { path: string; body: string; new_position?: number; old_position?: number };
 
-export type Forgejo = { createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void> };
+export type Forgejo = { login: string; createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void> };
 export type Git = { checkout(pr: PR, base: string, head: string): Promise<Checkout>; remove(checkout: Checkout): Promise<void> };
 export type Claude = { review(checkout: Checkout, large: boolean): Promise<Review> };
 export type Adapters = { forgejo: Forgejo; git: Git; claude: Claude };

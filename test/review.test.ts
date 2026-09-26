@@ -184,3 +184,10 @@ test("a PR payload that fails validation runs no job", async () => {
   await app.idle();
   expect(calls).toEqual([]);
 });
+
+test("the bot's own events run no job", async () => {
+  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  await send(app, "pull_request", { ...opened, sender: { login: "reviewer-bot" } });
+  await app.idle();
+  expect(calls).toEqual([]);
+});

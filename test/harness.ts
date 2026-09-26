@@ -7,22 +7,20 @@ type Call = { adapter: string; method: string; args: unknown[] };
 
 export function setup(returns: Record<string, unknown> = {}) {
   const calls: Call[] = [];
-  const fake = (adapter: string): any =>
-    new Proxy(
-      {},
-      {
+  const fake = (adapter: string, props: Record<string | symbol, unknown> = {}): any =>
+    new Proxy(props, {
+      get: (_, method) => {
+        if (method in props) return props[method];
         // not thenable, so awaiting an adapter doesn't record a call
-        get: (_, method) =>
-          method === "then"
-            ? undefined
-            : (...args: unknown[]) => {
-                calls.push({ adapter, method: String(method), args });
-                const r = returns[`${adapter}.${String(method)}`];
-                return typeof r === "function" ? r(...args) : r;
-              },
+        if (method === "then") return undefined;
+        return (...args: unknown[]) => {
+          calls.push({ adapter, method: String(method), args });
+          const r = returns[`${adapter}.${String(method)}`];
+          return typeof r === "function" ? r(...args) : r;
+        };
       },
-    );
-  const app = createApp({ forgejo: fake("forgejo"), git: fake("git"), claude: fake("claude") });
+    });
+  const app = createApp({ forgejo: fake("forgejo", { login: "reviewer-bot" }), git: fake("git"), claude: fake("claude") });
   return { app, calls };
 }
 

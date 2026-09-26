@@ -42,7 +42,10 @@ const PullRequestEvent = z.object({
   repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
 });
 
+const Sender = z.object({ sender: z.object({ login: z.string() }) });
+
 async function handle(adapters: Adapters, event: string | undefined, payload: unknown) {
+  if (Sender.safeParse(payload).data?.sender.login === adapters.forgejo.login) return;
   if (event !== "pull_request") return;
   const parsed = PullRequestEvent.safeParse(payload);
   if (!parsed.success) return;
