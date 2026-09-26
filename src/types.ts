@@ -37,6 +37,7 @@ export type BotComment = { id: number; review: number; user: string; path: strin
 
 export type Forgejo = {
   login: string;
+  react(pr: PR): Promise<void>;
   createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void>;
   reviews(pr: PR): Promise<{ id: number; user: string; body: string }[]>;
   comments(pr: PR, review: number): Promise<BotComment[]>;

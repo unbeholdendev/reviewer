@@ -16,6 +16,9 @@ async function api<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promi
 
 export const forgejo: Forgejo = {
   login: (await api("/user", ForgejoUser)).login,
+  async react({ owner, repo, number }) {
+    await api(`/repos/${owner}/${repo}/issues/${number}/reactions`, z.unknown(), { content: "eyes" });
+  },
   async createReview({ owner, repo, number }, review) {
     await api(`/repos/${owner}/${repo}/pulls/${number}/reviews`, ForgejoCreated, review);
   },

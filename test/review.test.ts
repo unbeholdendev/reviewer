@@ -11,7 +11,7 @@ test("an opened PR gets a COMMENT review with the summary and recommendation", a
   const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.filter((c) => c.adapter === "forgejo")).toEqual([
+  expect(calls.filter((c) => c.method === "createReview")).toEqual([
     {
       adapter: "forgejo",
       method: "createReview",
@@ -24,7 +24,7 @@ test("a reopened PR gets a review", async () => {
   const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
   await send(app, "pull_request", { ...opened, action: "reopened" });
   await app.idle();
-  expect(calls.filter((c) => c.adapter === "forgejo")).toHaveLength(1);
+  expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
 });
 
 test("other PR actions and other events run no job", async () => {
@@ -77,7 +77,7 @@ test("comments on diff lines go inline, others move into the summary", async () 
   const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": { ...review, comments } });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toEqual({
+  expect(calls.find((c) => c.method === "createReview")?.args[1]).toEqual({
     event: "COMMENT",
     body: [
       "**Recommendation:** nits\n\nAdds a signed webhook route.",
@@ -116,7 +116,7 @@ test("lockfiles and vendored files are not reviewed and get no comments", async 
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.find((c) => c.adapter === "claude")?.args[0]).toEqual({ ...checkout, diff: `${kept}\n` });
-  expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toEqual({
+  expect(calls.find((c) => c.method === "createReview")?.args[1]).toEqual({
     event: "COMMENT",
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
     comments: [{ path: "src/a.ts", new_position: 1, body: "**nit:** Real." }],
@@ -141,7 +141,7 @@ test("a PR that comes out of draft gets a review, other title edits do not", asy
   await send(app, "pull_request", edited("WIP: Signed webhook endpoint"));
   await send(app, "pull_request", edited("[wip] Signed webhook endpoint"));
   await app.idle();
-  expect(calls.filter((c) => c.adapter === "forgejo")).toHaveLength(2);
+  expect(calls.filter((c) => c.method === "createReview")).toHaveLength(2);
 });
 
 test("a PR labelled no-review runs no job", async () => {
@@ -163,7 +163,7 @@ test("a PR over 3000 changed lines gets a partial review with a note", async () 
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(true);
-  expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
+  expect(calls.find((c) => c.method === "createReview")?.args[1]).toMatchObject({
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.\n\n_Partial review: this PR has 3001 changed lines, so only the key files were reviewed._${marker}`,
   });
 });
@@ -174,9 +174,27 @@ test("filtered files do not count towards the large-PR threshold", async () => {
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(false);
-  expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
+  expect(calls.find((c) => c.method === "createReview")?.args[1]).toMatchObject({
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
   });
+});
+
+test("the PR gets a 👀 reaction before the review starts", async () => {
+  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(calls[0]).toEqual({ adapter: "forgejo", method: "react", args: [pr] });
+});
+
+test("a failed reaction does not stop the review", async () => {
+  const { app, calls } = setup({
+    "forgejo.react": () => Promise.reject(new Error("no permission")),
+    "git.checkout": checkout,
+    "claude.review": review,
+  });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
 });
 
 test("a PR payload that fails validation runs no job", async () => {

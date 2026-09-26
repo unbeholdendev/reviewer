@@ -5,6 +5,11 @@ const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
 
 export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean) {
+  try {
+    await forgejo.react(pr);
+  } catch (e) {
+    console.error("reaction failed:", e);
+  }
   const reviews = pushed ? (await forgejo.reviews(pr)).filter((r) => r.user === forgejo.login) : [];
   // anchored: the summary is model output and could echo a marker
   const since = reviews.map((r) => r.body.match(/<!-- reviewer:sha=(\w+) -->$/)?.[1]).findLast(Boolean);
