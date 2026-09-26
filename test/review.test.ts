@@ -143,6 +143,16 @@ test("a PR that comes out of draft gets a review, other title edits do not", asy
   expect(calls.filter((c) => c.adapter === "forgejo")).toHaveLength(2);
 });
 
+test("a PR labelled no-review runs no job", async () => {
+  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const pull_request = { ...opened.pull_request, labels: [{ name: "bug" }, { name: "no-review" }] };
+  await send(app, "pull_request", { ...opened, pull_request });
+  await send(app, "pull_request", { ...opened, action: "reopened", pull_request });
+  await send(app, "pull_request", { ...opened, action: "edited", changes: { title: { from: "WIP: x" } }, pull_request });
+  await app.idle();
+  expect(calls).toEqual([]);
+});
+
 const lines = (path: string, n: number) =>
   [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, `@@ -1,0 +1,${n} @@`, ...Array(n).fill("+x")].join("\n");
 

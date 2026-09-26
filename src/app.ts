@@ -35,6 +35,7 @@ const PullRequestEvent = z.object({
   pull_request: z.object({
     state: z.string(),
     draft: z.boolean().optional(),
+    labels: z.array(z.object({ name: z.string() })).nullish(),
     base: z.object({ sha: z.string() }),
     head: z.object({ sha: z.string() }),
   }),
@@ -46,6 +47,7 @@ async function handle(adapters: Adapters, event: string | undefined, payload: un
   const parsed = PullRequestEvent.safeParse(payload);
   if (!parsed.success) return;
   const { action, changes, number, pull_request, repository } = parsed.data;
+  if (pull_request.labels?.some((l) => l.name === "no-review")) return;
   // Forgejo has no ready-for-review action: a draft is a title with a WIP prefix
   const undrafted = action === "edited" && /^(wip:|\[wip\])/i.test(changes?.title?.from ?? "");
   if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted)) return;
