@@ -29,8 +29,8 @@ const args = [
 ];
 
 export const claude: Adapters["claude"] = {
-  async review(_pr, { dir, diff, log, rules }) {
-    const prompt = `${instructions}\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}`;
+  async review(_pr, { dir, diff, log, rules }, large) {
+    const prompt = `${instructions}\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff${large ? " (large PR)" : ""}\n\n${diff}`;
     const proc = Bun.spawn(args, {
       cwd: dir,
       // no FORGEJO_TOKEN or WEBHOOK_SECRET for Claude to leak

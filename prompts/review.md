@@ -11,6 +11,8 @@ Look for:
 
 Skip style points a formatter or linter would catch.
 
+If the Diff heading says "large PR", don't try to cover every file. Focus on the key files: core logic, security-sensitive code and public interfaces.
+
 Return:
 
 - `summary`: what the PR does in one or two sentences, then any findings that don't belong on one line.

@@ -11,7 +11,7 @@ export type Checkout = { dir: string; diff: string; log: string; rules: string }
 export type Adapters = {
   forgejo: { createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void> };
   git: { checkout(pr: PR, base: string, head: string): Promise<Checkout>; remove(checkout: Checkout): Promise<void> };
-  claude: { review(pr: PR, checkout: Checkout): Promise<Review> };
+  claude: { review(pr: PR, checkout: Checkout, large: boolean): Promise<Review> };
 };
 
 export function createApp(adapters: Adapters) {
@@ -39,15 +39,24 @@ export function createApp(adapters: Adapters) {
 const PullRequestEvent = z.object({
   action: z.string(),
   number: z.number(),
-  pull_request: z.object({ base: z.object({ sha: z.string() }), head: z.object({ sha: z.string() }) }),
+  changes: z.object({ title: z.object({ from: z.string() }).optional() }).optional(),
+  pull_request: z.object({
+    state: z.string(),
+    draft: z.boolean().optional(),
+    base: z.object({ sha: z.string() }),
+    head: z.object({ sha: z.string() }),
+  }),
   repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
 });
 
 async function handle({ forgejo, git, claude }: Adapters, event: string | undefined, payload: unknown) {
   if (event !== "pull_request") return;
   const parsed = PullRequestEvent.safeParse(payload);
-  if (!parsed.success || !["opened", "reopened"].includes(parsed.data.action)) return;
-  const { number, pull_request, repository } = parsed.data;
+  if (!parsed.success) return;
+  const { action, changes, number, pull_request, repository } = parsed.data;
+  // Forgejo has no ready-for-review action: a draft is a title with a WIP prefix
+  const undrafted = action === "edited" && /^(wip:|\[wip\])/i.test(changes?.title?.from ?? "");
+  if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted)) return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
   const checkout = await git.checkout(pr, pull_request.base.sha, pull_request.head.sha);
   try {
@@ -55,12 +64,15 @@ async function handle({ forgejo, git, claude }: Adapters, event: string | undefi
       .split(/^(?=diff --git )/m)
       .filter((s) => !skipped(s.match(/^diff --git .* "?b\/(.*?)"?$/m)?.[1] ?? ""))
       .join("");
-    const { summary, recommendation, comments: all } = await claude.review(pr, { ...checkout, diff });
+    const changed = diff.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length;
+    const large = changed > largePR;
+    const { summary, recommendation, comments: all } = await claude.review(pr, { ...checkout, diff }, large);
     const comments = all.filter((c) => !skipped(c.path));
     const lines = anchorable(diff);
     const inline = comments.filter((c) => lines.has(`${c.side} ${c.path}:${c.line}`));
     const outside = comments.filter((c) => !inline.includes(c));
     let body = `**Recommendation:** ${recommendation}\n\n${summary}`;
+    if (large) body += `\n\n_Partial review: this PR has ${changed} changed lines, so only the key files were reviewed._`;
     if (outside.length)
       body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` **${c.severity}:** ${c.body}`).join("\n")}`;
     await forgejo.createReview(pr, {
@@ -77,6 +89,7 @@ async function handle({ forgejo, git, claude }: Adapters, event: string | undefi
   }
 }
 
+const largePR = 3000;
 const lockfiles =
   /(^|\/)(bun\.lockb?|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|go\.sum|poetry\.lock|uv\.lock|Pipfile\.lock|composer\.lock|Gemfile\.lock|flake\.lock|mix\.lock|pubspec\.lock|Podfile\.lock|packages\.lock\.json)$/;
 const vendored = /(^|\/)(vendor|node_modules|third_party)\//;
