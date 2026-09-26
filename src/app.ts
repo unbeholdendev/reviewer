@@ -53,7 +53,8 @@ async function handle(adapters: Adapters, event: string | undefined, payload: un
   if (pull_request.labels?.some((l) => l.name === "no-review")) return;
   // Forgejo has no ready-for-review action: a draft is a title with a WIP prefix
   const undrafted = action === "edited" && /^(wip:|\[wip\])/i.test(changes?.title?.from ?? "");
-  if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted)) return;
+  const pushed = action === "synchronized";
+  if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted || pushed)) return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
-  await review(adapters, pr, pull_request.base.sha, pull_request.head.sha);
+  await review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed);
 }

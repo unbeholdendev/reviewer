@@ -16,8 +16,10 @@ const args = [
 ];
 
 export const claude: Claude = {
-  async review({ dir, diff, log, rules }, large) {
-    const prompt = `${instructions}\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff${large ? " (large PR)" : ""}\n\n${diff}`;
+  async review({ dir, diff, log, rules, incremental }, large, open) {
+    const comments = open.map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`).join("\n");
+    const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
+    const prompt = `${instructions}\n## Repository rules\n\n${rules || "None."}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`;
     const proc = Bun.spawn(args, {
       cwd: dir,
       // no FORGEJO_TOKEN or WEBHOOK_SECRET for Claude to leak

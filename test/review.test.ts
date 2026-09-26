@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { send, setup } from "./harness";
 import opened from "./fixtures/pull_request.opened.json";
 
-const review = { summary: "Adds a signed webhook route.", recommendation: "nits", comments: [] };
+const review = { summary: "Adds a signed webhook route.", recommendation: "nits", comments: [], addressed: [] };
 const pr = { owner: "pycan", repo: "reviewer", number: 27 };
 const checkout = { dir: "/wt", diff: "", log: "", rules: "" };
+const marker = `\n\n<!-- reviewer:sha=${opened.pull_request.head.sha} -->`;
 
 test("an opened PR gets a COMMENT review with the summary and recommendation", async () => {
   const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
@@ -14,7 +15,7 @@ test("an opened PR gets a COMMENT review with the summary and recommendation", a
     {
       adapter: "forgejo",
       method: "createReview",
-      args: [pr, { event: "COMMENT", body: "**Recommendation:** nits\n\nAdds a signed webhook route.", comments: [] }],
+      args: [pr, { event: "COMMENT", body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`, comments: [] }],
     },
   ]);
 });
@@ -40,7 +41,7 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "claude", method: "review", args: [checkout, false] },
+    { adapter: "claude", method: "review", args: [checkout, false, []] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });
@@ -81,7 +82,7 @@ test("comments on diff lines go inline, others move into the summary", async () 
     body: [
       "**Recommendation:** nits\n\nAdds a signed webhook route.",
       "**Outside the diff:**\n\n- `src/a.ts:40` **nit:** Far away.\n- `src/b.ts:1` **blocking:** Not in diff.",
-    ].join("\n\n"),
+    ].join("\n\n") + marker,
     comments: [
       { path: "src/a.ts", new_position: 11, body: "**blocking:** Null here." },
       { path: "src/a.ts", old_position: 11, body: "**nit:** Was fine." },
@@ -117,7 +118,7 @@ test("lockfiles and vendored files are not reviewed and get no comments", async 
   expect(calls.find((c) => c.adapter === "claude")?.args[0]).toEqual({ ...checkout, diff: `${kept}\n` });
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toEqual({
     event: "COMMENT",
-    body: "**Recommendation:** nits\n\nAdds a signed webhook route.",
+    body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
     comments: [{ path: "src/a.ts", new_position: 1, body: "**nit:** Real." }],
   });
 });
@@ -163,7 +164,7 @@ test("a PR over 3000 changed lines gets a partial review with a note", async () 
   await app.idle();
   expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(true);
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
-    body: "**Recommendation:** nits\n\nAdds a signed webhook route.\n\n_Partial review: this PR has 3001 changed lines, so only the key files were reviewed._",
+    body: `**Recommendation:** nits\n\nAdds a signed webhook route.\n\n_Partial review: this PR has 3001 changed lines, so only the key files were reviewed._${marker}`,
   });
 });
 
@@ -174,7 +175,7 @@ test("filtered files do not count towards the large-PR threshold", async () => {
   await app.idle();
   expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(false);
   expect(calls.find((c) => c.adapter === "forgejo")?.args[1]).toMatchObject({
-    body: "**Recommendation:** nits\n\nAdds a signed webhook route.",
+    body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
   });
 });
 
@@ -190,4 +191,102 @@ test("the bot's own events run no job", async () => {
   await send(app, "pull_request", { ...opened, sender: { login: "reviewer-bot" } });
   await app.idle();
   expect(calls).toEqual([]);
+});
+
+test("a push reviews the commits since the latest marker in the bot's reviews", async () => {
+  const { app, calls } = setup({
+    "git.checkout": checkout,
+    "claude.review": review,
+    "forgejo.reviews": [
+      { user: "reviewer-bot", body: "old\n\n<!-- reviewer:sha=aaa -->" },
+      { user: "reviewer-bot", body: "new\n\n<!-- reviewer:sha=bbb -->" },
+      { user: "reviewer-bot", body: "no marker" },
+      { user: "reviewer-bot", body: "echoed <!-- reviewer:sha=ddd --> mid-body" },
+      { user: "mallory", body: "<!-- reviewer:sha=ccc -->" },
+    ],
+  });
+  await send(app, "pull_request", { ...opened, action: "synchronized" });
+  await app.idle();
+  const { base, head } = opened.pull_request;
+  expect(calls.find((c) => c.adapter === "git")?.args).toEqual([pr, base.sha, head.sha, "bbb"]);
+  expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
+});
+
+test("a push with no marker gets a full review", async () => {
+  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review, "forgejo.reviews": [] });
+  await send(app, "pull_request", { ...opened, action: "synchronized" });
+  await app.idle();
+  const { base, head } = opened.pull_request;
+  expect(calls.find((c) => c.adapter === "git")?.args).toEqual([pr, base.sha, head.sha, undefined]);
+});
+
+const botComment = (id: number, body: string, resolved = false, user = "reviewer-bot") =>
+  ({ id, review: 1, user, path: "src/a.ts", line: 3, side: "RIGHT", body, resolved });
+
+test("an incremental review sees the bot's open comments and replies once to each one addressed", async () => {
+  const open = botComment(10, "**nit:** Rename this.");
+  const spoofed = botComment(16, "**nit:** Still open.");
+  const { app, calls } = setup({
+    "git.checkout": { ...checkout, incremental: true, log: "commit bbb1111222233334444\n" },
+    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", body: "<!-- reviewer:sha=aaa -->" }],
+    "forgejo.comments": [
+      open,
+      botComment(11, "**nit:** Resolved already.", true),
+      botComment(12, "**blocking:** Replied to already."),
+      botComment(13, "Fixed in abc1234.\n\n<!-- reviewer:fixed=12 -->"),
+      botComment(14, "**nit:** Planted by someone else.", false, "mallory"),
+      botComment(15, "Fixed in abc1234.\n\n<!-- reviewer:fixed=16 -->", false, "mallory"),
+      spoofed,
+    ],
+    "claude.review": {
+      ...review,
+      addressed: [
+        { commentId: 10, sha: "bbb1111" },
+        { commentId: 10, sha: "bbb1111" },
+        { commentId: 11, sha: "bbb1111" },
+        { commentId: 12, sha: "bbb1111" },
+        { commentId: 14, sha: "bbb1111" },
+        { commentId: 16, sha: "fff9999" },
+        { commentId: 99, sha: "bbb1111" },
+      ],
+    },
+  });
+  await send(app, "pull_request", { ...opened, action: "synchronized" });
+  await app.idle();
+  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toEqual([open, spoofed]);
+  expect(calls.filter((c) => c.method === "reply").map((c) => c.args)).toEqual([
+    [pr, open, "Fixed in bbb1111.\n\n<!-- reviewer:fixed=10 -->"],
+  ]);
+});
+
+test("a full review sees no open comments", async () => {
+  const { app, calls } = setup({
+    "git.checkout": checkout,
+    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", body: "<!-- reviewer:sha=aaa -->" }],
+    "forgejo.comments": [botComment(10, "**nit:** Rename this.")],
+    "claude.review": { ...review, addressed: [{ commentId: 10, sha: "bbb1111" }] },
+  });
+  await send(app, "pull_request", { ...opened, action: "synchronized" });
+  await app.idle();
+  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toEqual([]);
+  expect(calls.filter((c) => c.method === "reply")).toEqual([]);
+});
+
+test("an incremental review moves comments on removed lines into the summary", async () => {
+  const diff = ["diff --git a/src/a.ts b/src/a.ts", "--- a/src/a.ts", "+++ b/src/a.ts", "@@ -1 +1 @@", "-old", "+new"].join("\n");
+  const comments = [
+    { path: "src/a.ts", line: 1, side: "LEFT", body: "Was fine.", severity: "nit" },
+    { path: "src/a.ts", line: 1, side: "RIGHT", body: "New.", severity: "nit" },
+  ];
+  const { app, calls } = setup({
+    "git.checkout": { ...checkout, diff, incremental: true },
+    "forgejo.reviews": [],
+    "claude.review": { ...review, comments },
+  });
+  await send(app, "pull_request", { ...opened, action: "synchronized" });
+  await app.idle();
+  expect(calls.find((c) => c.method === "createReview")?.args[1]).toMatchObject({
+    body: `**Recommendation:** nits\n\nAdds a signed webhook route.\n\n**Outside the diff:**\n\n- \`src/a.ts:1\` **nit:** Was fine.${marker}`,
+    comments: [{ path: "src/a.ts", new_position: 1, body: "**nit:** New." }],
+  });
 });

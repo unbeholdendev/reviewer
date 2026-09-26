@@ -33,20 +33,22 @@ function locked<T>(mirror: string, fn: () => Promise<T>) {
 }
 
 export const git: Git = {
-  checkout({ owner, repo }, base, head) {
+  checkout({ owner, repo }, base, head, since) {
     const mirror = join(root, "mirrors", owner, `${repo}.git`);
     return locked(mirror, async () => {
       if (existsSync(mirror)) await run("-C", mirror, "fetch", "--prune", "origin");
       else await run("clone", "--mirror", `${FORGEJO_URL}/${owner}/${repo}.git`, mirror);
       await run("-C", mirror, "worktree", "prune");
-      const diff = await run("-C", mirror, "diff", `${base}...${head}`);
-      const log = await run("-C", mirror, "log", `${base}..${head}`);
+      // a force-push can drop since from head's history: fall back to a full review
+      const from = since && (await run("-C", mirror, "merge-base", "--is-ancestor", since, head).then(() => since, () => ""));
+      const diff = await run("-C", mirror, "diff", from ? `${from}..${head}` : `${base}...${head}`);
+      const log = await run("-C", mirror, "log", `${from || base}..${head}`);
       const rules = await Promise.all(
         ["REVIEW.md", "CLAUDE.md"].map((f) => run("-C", mirror, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
       );
       const dir = join(root, "worktrees", randomUUID());
       await run("-C", mirror, "worktree", "add", "--detach", dir, head);
-      return { dir, diff, log, rules: rules.filter(Boolean).join("\n") };
+      return { dir, diff, log, rules: rules.filter(Boolean).join("\n"), incremental: !!from };
     });
   },
 

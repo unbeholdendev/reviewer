@@ -11,6 +11,8 @@ Look for:
 
 Skip style points a formatter or linter would catch.
 
+If the Diff heading says "new commits only", you reviewed this PR before and the diff holds only the commits pushed since. "Your open comments" lists what you said last time. Don't repeat those findings. For each one the new commits fix, add it to `addressed`.
+
 If the Diff heading says "large PR", don't try to cover every file. Focus on the key files: core logic, security-sensitive code and public interfaces.
 
 Return:
@@ -23,3 +25,6 @@ Return:
   - `body`: the finding, short
   - `severity`: `blocking` if it should not merge as is, else `nit`
 - `recommendation`: `blocking` if it should not merge as is, `nits` if only small fixes are left, `looks-good` if there is nothing to fix.
+- `addressed`: one per open comment the new commits fix, else empty.
+  - `commentId`: the comment's id
+  - `sha`: the commit from Commits that fixes it
