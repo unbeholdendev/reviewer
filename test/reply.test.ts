@@ -105,7 +105,7 @@ test("\"@bot review again\" gets 👀 and a full base..head review, ignoring the
     { adapter: "forgejo", method: "pull", args: [pr] },
     { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head, undefined] },
-    { adapter: "claude", method: "review", args: [checkout, false, []] },
+    { adapter: "claude", method: "review", args: [checkout, false, [], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
   expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);

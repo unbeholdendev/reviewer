@@ -14,7 +14,7 @@ const args = [
   "--output-format", "json",
 ];
 
-async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>): Promise<T> {
+async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
   const proc = Bun.spawn([...args, "--json-schema", JSON.stringify(z.toJSONSchema(schema, { target: "draft-7" }))], {
     cwd: dir,
     // no FORGEJO_TOKEN or WEBHOOK_SECRET for Claude to leak
@@ -22,6 +22,7 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>): Promis
     stdin: new Blob([prompt]),
     stdout: "pipe",
     stderr: "pipe",
+    signal,
   });
   const [out, err, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
   if (code) throw new Error(`claude exited ${code}: ${err || out}`);
@@ -31,10 +32,10 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>): Promis
 }
 
 export const claude: Claude = {
-  review({ dir, diff, log, rules, incremental }, large, open) {
+  review({ dir, diff, log, rules, incremental }, large, open, signal) {
     const comments = open.map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`).join("\n");
     const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
-    return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review);
+    return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review, signal);
   },
   reply({ dir, diff, log, rules }, comment, thread) {
     const history = thread ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n` : "";

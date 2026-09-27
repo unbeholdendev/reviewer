@@ -3,11 +3,13 @@ import { z } from "zod";
 import { CONCURRENCY, WEBHOOK_SECRET } from "./env";
 import { reply, review } from "./review";
 import { verify } from "./signature";
-import type { Adapters } from "./types";
+import type { Adapters, PR } from "./types";
 
 export function createApp(adapters: Adapters) {
-  const pending = new Set<Promise<void>>();
+  const pending = new Set<Promise<unknown>>();
   const waiting: (() => void)[] = [];
+  const tails = new Map<string, Promise<unknown>>();
+  const reviews = new Map<string, AbortController>();
   let running = 0;
   const app = new Hono();
 
@@ -28,12 +30,30 @@ export function createApp(adapters: Adapters) {
     const body = await c.req.text();
     if (!verify(WEBHOOK_SECRET, body, c.req.header("X-Forgejo-Signature"))) return c.body(null, 401);
     const event = c.req.header("X-Forgejo-Event");
-    const job = limited(() => handle(adapters, event, JSON.parse(body)))
-      .catch((e) => console.log("webhook job failed:", e))
-      .finally(() => pending.delete(job));
-    pending.add(job);
+    const job = handle(adapters, event, JSON.parse(body));
+    if (job) schedule(job);
     return c.body(null, 200);
   });
+
+  function schedule({ pr, cancellable, pushed, run }: Job) {
+    const key = `${pr.owner}/${pr.repo}#${pr.number}`;
+    if (pushed) reviews.get(key)?.abort();
+    if (pushed || !reviews.has(key)) reviews.set(key, new AbortController());
+    const controller = cancellable ? reviews.get(key)! : new AbortController();
+    const job = (tails.get(key) ?? Promise.resolve())
+      .then(() => limited(() => run(controller.signal)))
+      .catch((e) => {
+        if (!controller.signal.aborted) console.log("webhook job failed:", e);
+      })
+      .finally(() => {
+        pending.delete(job);
+        if (tails.get(key) !== job) return;
+        tails.delete(key);
+        reviews.delete(key);
+      });
+    tails.set(key, job);
+    pending.add(job);
+  }
 
   async function idle() {
     while (pending.size) await Promise.all(pending);
@@ -66,7 +86,9 @@ const IssueCommentEvent = z.object({
 
 const Sender = z.object({ sender: z.object({ login: z.string() }) });
 
-async function handle(adapters: Adapters, event: string | undefined, payload: unknown) {
+type Job = { pr: PR; cancellable: boolean; pushed?: boolean; run: (signal: AbortSignal) => Promise<void> };
+
+function handle(adapters: Adapters, event: string | undefined, payload: unknown): Job | undefined {
   if (Sender.safeParse(payload).data?.sender.login === adapters.forgejo.login) return;
   if (event === "issue_comment") return commented(adapters, payload);
   if (event !== "pull_request") return;
@@ -79,10 +101,10 @@ async function handle(adapters: Adapters, event: string | undefined, payload: un
   const pushed = action === "synchronized";
   if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted || pushed)) return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
-  await review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed);
+  return { pr, cancellable: true, pushed, run: (signal) => review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed, signal) };
 }
 
-async function commented(adapters: Adapters, payload: unknown) {
+function commented(adapters: Adapters, payload: unknown): Job | undefined {
   const parsed = IssueCommentEvent.safeParse(payload);
   if (!parsed.success) return;
   const { action, is_pull, issue, comment, repository } = parsed.data;
@@ -93,8 +115,14 @@ async function commented(adapters: Adapters, payload: unknown) {
   const mentioned = new RegExp(`${mention}(?![\\w-]|\\.\\w)`, "i").test(comment.body);
   const rest = comment.body.replace(new RegExp(`${mention}[\\s,:]+review\\s+again\\b`, "i"), "$1");
   const pr = { owner: repository.owner.login, repo: repository.name, number: issue.number };
-  if (rest === comment.body) return reply(adapters, pr, comment, mentioned);
-  const { base, head } = await adapters.forgejo.pull(pr);
-  await review(adapters, pr, base, head, false, comment.id);
-  if (/\w/.test(rest)) await reply(adapters, pr, comment, true);
+  if (rest === comment.body) return { pr, cancellable: false, run: () => reply(adapters, pr, comment, mentioned) };
+  return {
+    pr,
+    cancellable: true,
+    async run(signal) {
+      const { base, head } = await adapters.forgejo.pull(pr);
+      await review(adapters, pr, base, head, false, signal, comment.id);
+      if (/\w/.test(rest) && !signal.aborted) await reply(adapters, pr, comment, true);
+    },
+  };
 }

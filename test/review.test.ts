@@ -41,7 +41,7 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "claude", method: "review", args: [checkout, false, []] },
+    { adapter: "claude", method: "review", args: [checkout, false, [], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });

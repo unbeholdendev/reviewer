@@ -4,10 +4,12 @@ import type { Adapters, BotComment, Comment, Forgejo, PR, Thread } from "./types
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
 
-export async function review(adapters: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
+export async function review(adapters: Adapters, pr: PR, base: string, head: string, pushed: boolean, signal: AbortSignal, comment?: number) {
+  if (signal.aborted) return;
   try {
-    await run(adapters, pr, base, head, pushed, comment);
+    await run(adapters, pr, base, head, pushed, signal, comment);
   } catch (e) {
+    if (signal.aborted) throw e;
     try {
       await adapters.forgejo.comment(pr, `The review failed. Retry with \`@${adapters.forgejo.login} review again\`.`);
     } catch (c) {
@@ -17,7 +19,7 @@ export async function review(adapters: Adapters, pr: PR, base: string, head: str
   }
 }
 
-async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
+async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean, signal: AbortSignal, comment?: number) {
   try {
     await (comment ? forgejo.reactComment(pr, comment) : forgejo.react(pr));
   } catch (e) {
@@ -32,7 +34,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, hea
     const diff = withoutSkipped(checkout.diff);
     const changed = changedLines(diff);
     const large = changed > largePR;
-    const { summary, recommendation, comments: all, addressed } = await claude.review({ ...checkout, diff }, large, open);
+    const { summary, recommendation, comments: all, addressed } = await claude.review({ ...checkout, diff }, large, open, signal);
     const comments = all.filter((c) => !skipped(c.path));
     const lines = anchorable(diff);
     // Forgejo numbers removed lines against the PR base, not the last reviewed SHA
@@ -42,6 +44,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, hea
     if (large) body += `\n\n_Partial review: this PR has ${changed} changed lines, so only the key files were reviewed._`;
     if (outside.length) body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` ${label(c)}`).join("\n")}`;
     body += `\n\n<!-- reviewer:sha=${head} -->`;
+    if (signal.aborted) return;
     await forgejo.createReview(pr, {
       event: "COMMENT",
       body,
