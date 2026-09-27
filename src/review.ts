@@ -4,7 +4,20 @@ import type { Adapters, BotComment, Comment, Forgejo, PR, Thread } from "./types
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
 
-export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
+export async function review(adapters: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
+  try {
+    await run(adapters, pr, base, head, pushed, comment);
+  } catch (e) {
+    try {
+      await adapters.forgejo.comment(pr, `The review failed. Retry with \`@${adapters.forgejo.login} review again\`.`);
+    } catch (c) {
+      console.log("failure comment failed:", c);
+    }
+    throw e;
+  }
+}
+
+async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
   try {
     await (comment ? forgejo.reactComment(pr, comment) : forgejo.react(pr));
   } catch (e) {

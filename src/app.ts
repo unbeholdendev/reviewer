@@ -29,7 +29,7 @@ export function createApp(adapters: Adapters) {
     if (!verify(WEBHOOK_SECRET, body, c.req.header("X-Forgejo-Signature"))) return c.body(null, 401);
     const event = c.req.header("X-Forgejo-Event");
     const job = limited(() => handle(adapters, event, JSON.parse(body)))
-      .catch((e) => console.error("webhook job failed:", e))
+      .catch((e) => console.log("webhook job failed:", e))
       .finally(() => pending.delete(job));
     pending.add(job);
     return c.body(null, 200);

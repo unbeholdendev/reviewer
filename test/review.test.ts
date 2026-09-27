@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { send, setup } from "./harness";
 import opened from "./fixtures/pull_request.opened.json";
 
@@ -53,7 +53,7 @@ test("the checkout is removed when the review fails", async () => {
   });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.at(-1)).toEqual({ adapter: "git", method: "remove", args: [checkout] });
+  expect(calls.filter((c) => c.adapter === "git").at(-1)).toEqual({ adapter: "git", method: "remove", args: [checkout] });
 });
 
 test("comments on diff lines go inline, others move into the summary", async () => {
@@ -308,4 +308,36 @@ test("an incremental review moves comments on removed lines into the summary", a
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.\n\n**Outside the diff:**\n\n- \`src/a.ts:1\` **nit:** Was fine.${marker}`,
     comments: [{ path: "src/a.ts", new_position: 1, body: "**nit:** New." }],
   });
+});
+
+test("a failed review posts one failure comment and logs the error to stdout", async () => {
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  const error = new Error("claude failed");
+  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": () => Promise.reject(error) });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(calls.filter((c) => c.method === "comment")).toEqual([
+    { adapter: "forgejo", method: "comment", args: [pr, "The review failed. Retry with `@reviewer-bot review again`."] },
+  ]);
+  expect(log).toHaveBeenCalledWith("webhook job failed:", error);
+  log.mockRestore();
+});
+
+test("a failed checkout also posts a failure comment", async () => {
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  const { app, calls } = setup({ "git.checkout": () => Promise.reject(new Error("git failed")) });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(calls.filter((c) => c.method === "comment")).toHaveLength(1);
+  log.mockRestore();
+});
+
+test("a failed failure comment still logs the original error", async () => {
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  const error = new Error("git failed");
+  const { app } = setup({ "git.checkout": () => Promise.reject(error), "forgejo.comment": () => Promise.reject(new Error("forgejo down")) });
+  await send(app, "pull_request", opened);
+  await app.idle();
+  expect(log).toHaveBeenCalledWith("webhook job failed:", error);
+  log.mockRestore();
 });
