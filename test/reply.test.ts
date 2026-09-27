@@ -93,3 +93,36 @@ test("replies in threads the bot didn't start are ignored", async () => {
   await app.idle();
   expect(writes(calls)).toEqual([]);
 });
+
+const review = { summary: "Fine.", recommendation: "looks-good", comments: [], addressed: [] };
+const again = (body: string) => ({ ...mention, comment: { ...mention.comment, body } });
+
+test("\"@bot review again\" gets 👀 and a full base..head review, ignoring the SHA marker", async () => {
+  const { app, calls } = setup({ ...returns, "claude.review": review });
+  await send(app, "issue_comment", again("@reviewer-bot, review again"));
+  await app.idle();
+  expect(calls.filter((c) => c.method !== "createReview")).toEqual([
+    { adapter: "forgejo", method: "pull", args: [pr] },
+    { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
+    { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head, undefined] },
+    { adapter: "claude", method: "review", args: [checkout, false, []] },
+    { adapter: "git", method: "remove", args: [checkout] },
+  ]);
+  expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
+});
+
+test("text after \"review again\" is also answered as a question", async () => {
+  const { app, calls } = setup({ ...returns, "claude.review": review });
+  const body = "@Reviewer-Bot review again, and why is this safe?";
+  await send(app, "issue_comment", again(body));
+  await app.idle();
+  expect(calls.filter((c) => c.adapter === "claude").map((c) => [c.method, c.args[1]])).toEqual([["review", false], ["reply", body]]);
+  expect(calls.filter((c) => c.method === "comment")).toEqual([{ adapter: "forgejo", method: "comment", args: [pr, "Because."] }]);
+});
+
+test("\"review again\" without the mention is not a command", async () => {
+  const { app, calls } = setup({ ...returns, "claude.review": review });
+  await send(app, "issue_comment", again("please review again"));
+  await app.idle();
+  expect(writes(calls)).toEqual([]);
+});

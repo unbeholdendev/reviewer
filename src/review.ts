@@ -4,9 +4,9 @@ import type { Adapters, BotComment, Comment, Forgejo, PR, Thread } from "./types
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
 
-export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean) {
+export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: string, head: string, pushed: boolean, comment?: number) {
   try {
-    await forgejo.react(pr);
+    await (comment ? forgejo.reactComment(pr, comment) : forgejo.react(pr));
   } catch (e) {
     console.error("reaction failed:", e);
   }

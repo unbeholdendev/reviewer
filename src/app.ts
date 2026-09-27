@@ -89,6 +89,12 @@ async function commented(adapters: Adapters, payload: unknown) {
   const login = adapters.forgejo.login.replaceAll(".", "\\.");
   if (action !== "created" || !is_pull) return;
   // not part of an email or a longer login; a trailing full stop ends the sentence
-  const mentioned = new RegExp(`(^|[^\\w@])@${login}(?![\\w-]|\\.\\w)`, "i").test(comment.body);
-  await reply(adapters, { owner: repository.owner.login, repo: repository.name, number: issue.number }, comment, mentioned);
+  const mention = `(^|[^\\w@])@${login}`;
+  const mentioned = new RegExp(`${mention}(?![\\w-]|\\.\\w)`, "i").test(comment.body);
+  const rest = comment.body.replace(new RegExp(`${mention}[\\s,:]+review\\s+again\\b`, "i"), "$1");
+  const pr = { owner: repository.owner.login, repo: repository.name, number: issue.number };
+  if (rest === comment.body) return reply(adapters, pr, comment, mentioned);
+  const { base, head } = await adapters.forgejo.pull(pr);
+  await review(adapters, pr, base, head, false, comment.id);
+  if (/\w/.test(rest)) await reply(adapters, pr, comment, true);
 }
