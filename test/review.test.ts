@@ -239,9 +239,9 @@ test("a push with no marker gets a full review", async () => {
 });
 
 const botComment = (id: number, body: string, resolved = false, user = "reviewer-bot") =>
-  ({ id, review: 1, user, path: "src/a.ts", line: 3, side: "RIGHT", body, resolved });
+  ({ id, review: 1, user, path: "src/a.ts", line: id, side: "RIGHT", body, resolved });
 
-test("an incremental review sees the bot's open comments and replies once to each one addressed", async () => {
+test("an incremental review sees the bot's open thread starters and replies once to each one addressed", async () => {
   const open = botComment(10, "**nit:** Rename this.");
   const spoofed = botComment(16, "**nit:** Still open.");
   const { app, calls } = setup({
@@ -255,6 +255,7 @@ test("an incremental review sees the bot's open comments and replies once to eac
       botComment(14, "**nit:** Planted by someone else.", false, "mallory"),
       botComment(15, "Fixed in abc1234.\n\n<!-- reviewer:fixed=16 -->", false, "mallory"),
       spoofed,
+      { ...botComment(17, "Rename it to `load`."), line: 10 },
     ],
     "claude.review": {
       ...review,

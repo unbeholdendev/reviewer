@@ -37,6 +37,7 @@ export type PR = { owner: string; repo: string; number: number };
 export type Checkout = { dir: string; diff: string; log: string; rules: string; incremental?: boolean };
 export type InlineComment = { path: string; body: string; new_position?: number; old_position?: number };
 export type BotComment = { id: number; review: number; user: string; path: string; line: number; side: "LEFT" | "RIGHT"; body: string; resolved: boolean };
+export type Thread = [BotComment, ...BotComment[]];
 
 export type Forgejo = {
   login: string;
@@ -55,6 +56,6 @@ export type Git = {
 };
 export type Claude = {
   review(checkout: Checkout, large: boolean, open: BotComment[]): Promise<Review>;
-  reply(checkout: Checkout, comment: string): Promise<Reply>;
+  reply(checkout: Checkout, comment: string, thread?: Thread): Promise<Reply>;
 };
 export type Adapters = { forgejo: Forgejo; git: Git; claude: Claude };

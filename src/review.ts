@@ -1,5 +1,5 @@
 import { anchorable, changedLines, skipped, withoutSkipped } from "./diff";
-import type { Adapters, Comment, Forgejo, PR } from "./types";
+import type { Adapters, BotComment, Comment, Forgejo, PR, Thread } from "./types";
 
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
@@ -43,7 +43,9 @@ export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: s
   }
 }
 
-export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment: { id: number; body: string }) {
+export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment: { id: number; body: string }, mentioned: boolean) {
+  const thread = await botThread(forgejo, pr, comment.id);
+  if (!thread && !mentioned) return;
   try {
     await forgejo.reactComment(pr, comment.id);
   } catch (e) {
@@ -52,8 +54,8 @@ export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment:
   const { base, head } = await forgejo.pull(pr);
   const checkout = await git.checkout(pr, base, head);
   try {
-    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body);
-    await forgejo.comment(pr, body);
+    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread);
+    await (thread ? forgejo.reply(pr, thread[0], body) : forgejo.comment(pr, body));
   } finally {
     await git.remove(checkout);
   }
@@ -64,7 +66,23 @@ function label(c: Comment) {
 }
 
 async function openComments(forgejo: Forgejo, pr: PR, reviews: { id: number }[]) {
-  const all = (await Promise.all(reviews.map((r) => forgejo.comments(pr, r.id)))).flat().filter((c) => c.user === forgejo.login);
-  const fixed = new Set(all.map((c) => Number(c.body.match(fixReply)?.[1])));
-  return all.filter((c) => !c.resolved && !fixed.has(c.id) && !fixReply.test(c.body));
+  const all = (await Promise.all(reviews.map((r) => forgejo.comments(pr, r.id)))).flat();
+  const bot = all.filter((c) => c.user === forgejo.login);
+  const fixed = new Set(bot.map((c) => Number(c.body.match(fixReply)?.[1])));
+  return bot.filter((c) => !c.resolved && !fixed.has(c.id) && !fixReply.test(c.body) && !all.some((o) => o.id < c.id && sameThread(o, c)));
+}
+
+// Forgejo files a thread reply under the review that started the thread
+async function botThread(forgejo: Forgejo, pr: PR, id: number): Promise<Thread | undefined> {
+  for (const r of (await forgejo.reviews(pr)).filter((r) => r.user === forgejo.login)) {
+    const comments = await forgejo.comments(pr, r.id);
+    const comment = comments.find((c) => c.id === id);
+    if (!comment) continue;
+    const [first, ...rest] = comments.filter((c) => c.id < id && sameThread(c, comment)).sort((a, b) => a.id - b.id);
+    return first?.user === forgejo.login ? [first, ...rest] : undefined;
+  }
+}
+
+function sameThread(a: BotComment, b: BotComment) {
+  return a.review === b.review && a.path === b.path && a.line === b.line && a.side === b.side;
 }

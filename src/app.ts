@@ -54,7 +54,7 @@ const Sender = z.object({ sender: z.object({ login: z.string() }) });
 
 async function handle(adapters: Adapters, event: string | undefined, payload: unknown) {
   if (Sender.safeParse(payload).data?.sender.login === adapters.forgejo.login) return;
-  if (event === "issue_comment") return mentioned(adapters, payload);
+  if (event === "issue_comment") return commented(adapters, payload);
   if (event !== "pull_request") return;
   const parsed = PullRequestEvent.safeParse(payload);
   if (!parsed.success) return;
@@ -68,12 +68,13 @@ async function handle(adapters: Adapters, event: string | undefined, payload: un
   await review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed);
 }
 
-async function mentioned(adapters: Adapters, payload: unknown) {
+async function commented(adapters: Adapters, payload: unknown) {
   const parsed = IssueCommentEvent.safeParse(payload);
   if (!parsed.success) return;
   const { action, is_pull, issue, comment, repository } = parsed.data;
   const login = adapters.forgejo.login.replaceAll(".", "\\.");
+  if (action !== "created" || !is_pull) return;
   // not part of an email or a longer login; a trailing full stop ends the sentence
-  if (action !== "created" || !is_pull || !new RegExp(`(^|[^\\w@])@${login}(?![\\w-]|\\.\\w)`, "i").test(comment.body)) return;
-  await reply(adapters, { owner: repository.owner.login, repo: repository.name, number: issue.number }, comment);
+  const mentioned = new RegExp(`(^|[^\\w@])@${login}(?![\\w-]|\\.\\w)`, "i").test(comment.body);
+  await reply(adapters, { owner: repository.owner.login, repo: repository.name, number: issue.number }, comment, mentioned);
 }

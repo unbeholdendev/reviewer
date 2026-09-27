@@ -12,17 +12,18 @@ const mention = {
   repository: { name: "reviewer", owner: { login: "pycan" } },
   sender: { login: "alice" },
 };
-const returns = { "forgejo.pull": shas, "git.checkout": checkout, "claude.reply": { body: "Because." } };
+const returns = { "forgejo.reviews": [], "forgejo.pull": shas, "git.checkout": checkout, "claude.reply": { body: "Because." } };
 
 test("a PR comment mentioning the bot gets 👀, then a reply from the diff and comment", async () => {
   const { app, calls } = setup(returns);
   await send(app, "issue_comment", mention);
   await app.idle();
   expect(calls).toEqual([
+    { adapter: "forgejo", method: "reviews", args: [pr] },
     { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
     { adapter: "forgejo", method: "pull", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body] },
+    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined] },
     { adapter: "forgejo", method: "comment", args: [pr, "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -49,5 +50,46 @@ test("comments that don't mention the bot, edits, and issue comments are ignored
   await send(app, "issue_comment", { ...mention, action: "edited" });
   await send(app, "issue_comment", { ...mention, is_pull: false, issue: { number: 27, pull_request: null } });
   await app.idle();
-  expect(calls).toEqual([]);
+  expect(calls.filter((c) => !["reviews", "comments"].includes(c.method))).toEqual([]);
+});
+
+const botComment = (id: number, user: string, body: string) => ({ id, review: 5, user, path: "src/x.ts", line: 3, side: "RIGHT", body, resolved: false });
+const thread = [botComment(10, "reviewer-bot", "**nit:** rename this"), botComment(11, "alice", "to what?"), botComment(12, "bob", "elsewhere")];
+const threadReturns = {
+  ...returns,
+  "forgejo.reviews": [{ id: 4, user: "alice", body: "" }, { id: 5, user: "reviewer-bot", body: "" }],
+  "forgejo.comments": (_: unknown, review: number) => (review === 5 ? [...thread, { ...botComment(13, "bob", "other line"), line: 9 }] : []),
+};
+const threadReply = { ...mention, comment: { ...mention.comment, id: 11, body: "to what?" } };
+const writes = <T extends { adapter: string; method: string }>(calls: T[]) => calls.filter((c) => c.adapter !== "forgejo" || ["reactComment", "reply", "comment"].includes(c.method));
+
+test("a reply in a bot thread gets 👀, then an answer in that thread with the history", async () => {
+  const { app, calls } = setup(threadReturns);
+  await send(app, "issue_comment", threadReply);
+  await app.idle();
+  expect(writes(calls)).toEqual([
+    { adapter: "forgejo", method: "reactComment", args: [pr, 11] },
+    { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
+    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]]] },
+    { adapter: "forgejo", method: "reply", args: [pr, thread[0], "Because."] },
+    { adapter: "git", method: "remove", args: [checkout] },
+  ]);
+});
+
+test("a mention in a bot thread is answered in the thread", async () => {
+  const { app, calls } = setup(threadReturns);
+  await send(app, "issue_comment", { ...threadReply, comment: { ...threadReply.comment, body: "@reviewer-bot to what?" } });
+  await app.idle();
+  expect(calls.filter((c) => c.method === "comment")).toEqual([]);
+  expect(calls.filter((c) => c.method === "reply").map((c) => c.adapter)).toEqual(["claude", "forgejo"]);
+});
+
+test("replies in threads the bot didn't start are ignored", async () => {
+  const { app, calls } = setup({
+    ...threadReturns,
+    "forgejo.comments": (_: unknown, review: number) => (review === 4 ? [botComment(20, "alice", "hm"), botComment(21, "bob", "yes")] : []),
+  });
+  await send(app, "issue_comment", { ...threadReply, comment: { ...threadReply.comment, id: 21 } });
+  await app.idle();
+  expect(writes(calls)).toEqual([]);
 });
