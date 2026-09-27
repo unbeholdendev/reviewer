@@ -1,20 +1,34 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { WEBHOOK_SECRET } from "./env";
+import { CONCURRENCY, WEBHOOK_SECRET } from "./env";
 import { reply, review } from "./review";
 import { verify } from "./signature";
 import type { Adapters } from "./types";
 
 export function createApp(adapters: Adapters) {
   const pending = new Set<Promise<void>>();
+  const waiting: (() => void)[] = [];
+  let running = 0;
   const app = new Hono();
+
+  async function limited(fn: () => Promise<void>) {
+    if (running < CONCURRENCY) running++;
+    else await new Promise<void>((r) => waiting.push(r));
+    try {
+      await fn();
+    } finally {
+      // pass the slot on without freeing it, so a newcomer can't jump the queue
+      const next = waiting.shift();
+      if (next) next();
+      else running--;
+    }
+  }
 
   app.post("/webhook", async (c) => {
     const body = await c.req.text();
     if (!verify(WEBHOOK_SECRET, body, c.req.header("X-Forgejo-Signature"))) return c.body(null, 401);
     const event = c.req.header("X-Forgejo-Event");
-    const job = Promise.resolve()
-      .then(() => handle(adapters, event, JSON.parse(body)))
+    const job = limited(() => handle(adapters, event, JSON.parse(body)))
       .catch((e) => console.error("webhook job failed:", e))
       .finally(() => pending.delete(job));
     pending.add(job);
