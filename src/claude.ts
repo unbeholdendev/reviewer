@@ -12,6 +12,7 @@ const args = [
   "--tools", "Read,Grep,Glob",
   "--permission-mode", "dontAsk",
   "--output-format", "json",
+  "--max-turns", "30",
 ];
 
 async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
@@ -23,6 +24,8 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
     stdout: "pipe",
     stderr: "pipe",
     signal,
+    timeout: 10 * 60_000,
+    killSignal: "SIGKILL",
   });
   const [out, err, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
   if (code) throw new Error(`claude exited ${code}: ${err || out}`);
