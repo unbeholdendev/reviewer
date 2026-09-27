@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { FORGEJO_TOKEN, FORGEJO_URL } from "./env";
-import { type Forgejo, ForgejoCreated, ForgejoReview, ForgejoReviewComment, ForgejoUser } from "./types";
+import { type Forgejo, ForgejoCreated, ForgejoPull, ForgejoReview, ForgejoReviewComment, ForgejoUser } from "./types";
 
 const headers = { Authorization: `token ${FORGEJO_TOKEN}`, "Content-Type": "application/json" };
 
@@ -18,6 +18,16 @@ export const forgejo: Forgejo = {
   login: (await api("/user", ForgejoUser)).login,
   async react({ owner, repo, number }) {
     await api(`/repos/${owner}/${repo}/issues/${number}/reactions`, z.unknown(), { content: "eyes" });
+  },
+  async reactComment({ owner, repo }, comment) {
+    await api(`/repos/${owner}/${repo}/issues/comments/${comment}/reactions`, z.unknown(), { content: "eyes" });
+  },
+  async pull({ owner, repo, number }) {
+    const { base, head } = await api(`/repos/${owner}/${repo}/pulls/${number}`, ForgejoPull);
+    return { base: base.sha, head: head.sha };
+  },
+  async comment({ owner, repo, number }, body) {
+    await api(`/repos/${owner}/${repo}/issues/${number}/comments`, ForgejoCreated, { body });
   },
   async createReview({ owner, repo, number }, review) {
     await api(`/repos/${owner}/${repo}/pulls/${number}/reviews`, ForgejoCreated, review);

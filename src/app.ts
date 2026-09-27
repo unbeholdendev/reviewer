@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { WEBHOOK_SECRET } from "./env";
-import { review } from "./review";
+import { reply, review } from "./review";
 import { verify } from "./signature";
 import type { Adapters } from "./types";
 
@@ -42,10 +42,19 @@ const PullRequestEvent = z.object({
   repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
 });
 
+const IssueCommentEvent = z.object({
+  action: z.string(),
+  is_pull: z.boolean(),
+  issue: z.object({ number: z.number() }),
+  comment: z.object({ id: z.number(), body: z.string() }),
+  repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
+});
+
 const Sender = z.object({ sender: z.object({ login: z.string() }) });
 
 async function handle(adapters: Adapters, event: string | undefined, payload: unknown) {
   if (Sender.safeParse(payload).data?.sender.login === adapters.forgejo.login) return;
+  if (event === "issue_comment") return mentioned(adapters, payload);
   if (event !== "pull_request") return;
   const parsed = PullRequestEvent.safeParse(payload);
   if (!parsed.success) return;
@@ -57,4 +66,14 @@ async function handle(adapters: Adapters, event: string | undefined, payload: un
   if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted || pushed)) return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
   await review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed);
+}
+
+async function mentioned(adapters: Adapters, payload: unknown) {
+  const parsed = IssueCommentEvent.safeParse(payload);
+  if (!parsed.success) return;
+  const { action, is_pull, issue, comment, repository } = parsed.data;
+  const login = adapters.forgejo.login.replaceAll(".", "\\.");
+  // not part of an email or a longer login; a trailing full stop ends the sentence
+  if (action !== "created" || !is_pull || !new RegExp(`(^|[^\\w@])@${login}(?![\\w-]|\\.\\w)`, "i").test(comment.body)) return;
+  await reply(adapters, { owner: repository.owner.login, repo: repository.name, number: issue.number }, comment);
 }

@@ -16,6 +16,8 @@ export const Review = z.object({
 });
 export type Review = z.infer<typeof Review>;
 export type Comment = Review["comments"][number];
+export const Reply = z.object({ body: z.string() });
+export type Reply = z.infer<typeof Reply>;
 
 export const ForgejoUser = z.object({ login: z.string() });
 export const ForgejoReview = z.object({ id: z.number(), user: ForgejoUser.nullable(), body: z.string() });
@@ -29,6 +31,7 @@ export const ForgejoReviewComment = z.object({
   resolver: ForgejoUser.nullable(),
 });
 export const ForgejoCreated = z.object({ id: z.number() });
+export const ForgejoPull = z.object({ base: z.object({ sha: z.string() }), head: z.object({ sha: z.string() }) });
 
 export type PR = { owner: string; repo: string; number: number };
 export type Checkout = { dir: string; diff: string; log: string; rules: string; incremental?: boolean };
@@ -38,6 +41,9 @@ export type BotComment = { id: number; review: number; user: string; path: strin
 export type Forgejo = {
   login: string;
   react(pr: PR): Promise<void>;
+  reactComment(pr: PR, comment: number): Promise<void>;
+  pull(pr: PR): Promise<{ base: string; head: string }>;
+  comment(pr: PR, body: string): Promise<void>;
   createReview(pr: PR, review: { event: "COMMENT"; body: string; comments: InlineComment[] }): Promise<void>;
   reviews(pr: PR): Promise<{ id: number; user: string; body: string }[]>;
   comments(pr: PR, review: number): Promise<BotComment[]>;
@@ -47,5 +53,8 @@ export type Git = {
   checkout(pr: PR, base: string, head: string, since?: string): Promise<Checkout>;
   remove(checkout: Checkout): Promise<void>;
 };
-export type Claude = { review(checkout: Checkout, large: boolean, open: BotComment[]): Promise<Review> };
+export type Claude = {
+  review(checkout: Checkout, large: boolean, open: BotComment[]): Promise<Review>;
+  reply(checkout: Checkout, comment: string): Promise<Reply>;
+};
 export type Adapters = { forgejo: Forgejo; git: Git; claude: Claude };

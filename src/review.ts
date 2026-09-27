@@ -43,6 +43,22 @@ export async function review({ forgejo, git, claude }: Adapters, pr: PR, base: s
   }
 }
 
+export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment: { id: number; body: string }) {
+  try {
+    await forgejo.reactComment(pr, comment.id);
+  } catch (e) {
+    console.error("reaction failed:", e);
+  }
+  const { base, head } = await forgejo.pull(pr);
+  const checkout = await git.checkout(pr, base, head);
+  try {
+    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body);
+    await forgejo.comment(pr, body);
+  } finally {
+    await git.remove(checkout);
+  }
+}
+
 function label(c: Comment) {
   return `**${c.severity}:** ${c.body}`;
 }
