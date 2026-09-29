@@ -1,6 +1,6 @@
 # Issue tracker: Forgejo
 
-Issues and specs live in Forgejo Issues on `pycan/reviewer` (git.unbeholden.dev). Use the Forgejo MCP tools (`mcp__forgejo__*`), owner `pycan`, repo `reviewer`. No CLI is installed.
+Issues and specs live in Forgejo Issues on `unbeholden/reviewer` (git.unbeholden.dev). Use the Forgejo MCP tools (`mcp__forgejo__*`), owner `unbeholden`, repo `reviewer`. No CLI is installed.
 
 ## Conventions
 
