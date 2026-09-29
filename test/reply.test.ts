@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { send, setup } from "./harness";
 
-const pr = { owner: "pycan", repo: "reviewer", number: 27 };
+const pr = { owner: "unbeholden", repo: "reviewer", number: 27 };
 const checkout = { dir: "/wt", diff: "diff --git a/x b/x\n", log: "", rules: "" };
 const shas = { base: "b".repeat(40), head: "c".repeat(40) };
 const mention = {
@@ -9,7 +9,7 @@ const mention = {
   is_pull: true,
   issue: { number: 27, pull_request: {} },
   comment: { id: 99, body: "@reviewer-bot why is this safe?", user: { login: "alice" } },
-  repository: { name: "reviewer", owner: { login: "pycan" } },
+  repository: { name: "reviewer", owner: { login: "unbeholden" } },
   sender: { login: "alice" },
 };
 const returns = { "forgejo.reviews": [], "forgejo.pull": shas, "git.checkout": checkout, "claude.reply": { body: "Because." } };

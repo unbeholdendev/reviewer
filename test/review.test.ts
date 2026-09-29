@@ -3,7 +3,7 @@ import { send, setup } from "./harness";
 import opened from "./fixtures/pull_request.opened.json";
 
 const review = { summary: "Adds a signed webhook route.", recommendation: "nits", comments: [], addressed: [] };
-const pr = { owner: "pycan", repo: "reviewer", number: 27 };
+const pr = { owner: "unbeholden", repo: "reviewer", number: 27 };
 const checkout = { dir: "/wt", diff: "", log: "", rules: "" };
 const marker = `\n\n<!-- reviewer:sha=${opened.pull_request.head.sha} -->`;
 
