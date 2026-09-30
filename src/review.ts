@@ -34,6 +34,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, hea
     const diff = withoutSkipped(checkout.diff);
     const changed = changedLines(diff);
     const large = changed > largePR;
+    console.log(`${key(pr)}: reviewing ${checkout.incremental ? `since ${since}` : "full diff"}, ${changed} changed lines, ${open.length} open comments`);
     const { summary, recommendation, comments: all, addressed } = await claude.review({ ...checkout, diff }, large, open, signal);
     const comments = all.filter((c) => !skipped(c.path));
     const lines = anchorable(diff);
@@ -44,6 +45,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, hea
     if (large) body += `\n\n_Partial review: this PR has ${changed} changed lines, so only the key files were reviewed._`;
     if (outside.length) body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` ${label(c)}`).join("\n")}`;
     body += `\n\n<!-- reviewer:sha=${head} -->`;
+    console.log(`${key(pr)}: ${recommendation}, ${inline.length} inline, ${outside.length} outside the diff, ${all.length - comments.length} on skipped files, ${addressed.length} addressed`);
     if (signal.aborted) return;
     await forgejo.createReview(pr, {
       event: "COMMENT",
@@ -61,7 +63,8 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, base: string, hea
 
 export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment: { id: number; body: string }, mentioned: boolean) {
   const thread = await botThread(forgejo, pr, comment.id);
-  if (!thread && !mentioned) return;
+  if (!thread && !mentioned) return console.log(`${key(pr)}: comment ${comment.id} not for the bot, no reply`);
+  console.log(`${key(pr)}: replying to comment ${comment.id}${thread ? " in a thread" : ""}`);
   try {
     await forgejo.reactComment(pr, comment.id);
   } catch (e) {
@@ -75,6 +78,10 @@ export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment:
   } finally {
     await git.remove(checkout);
   }
+}
+
+function key({ owner, repo, number }: PR) {
+  return `${owner}/${repo}#${number}`;
 }
 
 function label(c: Comment) {

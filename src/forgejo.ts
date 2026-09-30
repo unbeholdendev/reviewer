@@ -5,11 +5,10 @@ import { type Forgejo, ForgejoCreated, ForgejoPull, ForgejoReview, ForgejoReview
 const headers = { Authorization: `token ${FORGEJO_TOKEN}`, "Content-Type": "application/json" };
 
 async function api<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> {
-  const res = await fetch(`${FORGEJO_URL}/api/v1${path}`, {
-    method: body ? "POST" : "GET",
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const method = body ? "POST" : "GET";
+  const start = Date.now();
+  const res = await fetch(`${FORGEJO_URL}/api/v1${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  console.log(`forgejo ${method} ${path} ${res.status} ${Date.now() - start}ms`);
   if (!res.ok) throw new Error(`Forgejo ${path} ${res.status}: ${await res.text()}`);
   return schema.parse(await res.json());
 }

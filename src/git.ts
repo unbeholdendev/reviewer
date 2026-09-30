@@ -19,8 +19,10 @@ const env = {
 };
 
 async function run(...args: string[]) {
+  const start = Date.now();
   const proc = Bun.spawn(["git", ...args], { env, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  console.log(`git ${args.join(" ")}: exit ${code} ${Date.now() - start}ms`);
   if (code) throw new Error(`git ${args.join(" ")} exited ${code}: ${err}`);
   return out;
 }

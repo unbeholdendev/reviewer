@@ -28,22 +28,38 @@ export function createApp(adapters: Adapters) {
 
   app.post("/webhook", async (c) => {
     const body = await c.req.text();
-    if (!verify(WEBHOOK_SECRET, body, c.req.header("X-Forgejo-Signature"))) return c.body(null, 401);
+    const delivery = c.req.header("X-Forgejo-Delivery");
+    if (!verify(WEBHOOK_SECRET, body, c.req.header("X-Forgejo-Signature"))) {
+      console.log(`webhook ${delivery}: bad signature, 401`);
+      return c.body(null, 401);
+    }
     const event = c.req.header("X-Forgejo-Event");
-    const job = handle(adapters, event, JSON.parse(body));
+    const payload = JSON.parse(body);
+    const job = handle(adapters, event, payload);
+    const number = payload?.number ?? payload?.issue?.number;
+    console.log(`webhook ${delivery}: ${event} ${payload?.action} ${payload?.repository?.full_name}#${number} by ${payload?.sender?.login}: ${job ? "queued" : "ignored"}`);
     if (job) schedule(job);
     return c.body(null, 200);
   });
 
   function schedule({ pr, cancellable, pushed, run }: Job) {
     const key = `${pr.owner}/${pr.repo}#${pr.number}`;
+    if (pushed && reviews.has(key)) console.log(`${key}: new push, cancelling the running review`);
     if (pushed) reviews.get(key)?.abort();
     if (pushed || !reviews.has(key)) reviews.set(key, new AbortController());
     const controller = cancellable ? reviews.get(key)! : new AbortController();
     const job = (tails.get(key) ?? Promise.resolve())
-      .then(() => limited(() => run(controller.signal)))
+      .then(() =>
+        limited(async () => {
+          const start = Date.now();
+          console.log(`${key}: job started, ${waiting.length} waiting`);
+          await run(controller.signal);
+          console.log(`${key}: job ${controller.signal.aborted ? "cancelled" : "done"} in ${Date.now() - start}ms`);
+        }),
+      )
       .catch((e) => {
-        if (!controller.signal.aborted) console.log("webhook job failed:", e);
+        if (controller.signal.aborted) console.log(`${key}: job cancelled`);
+        else console.log("webhook job failed:", e);
       })
       .finally(() => {
         pending.delete(job);
