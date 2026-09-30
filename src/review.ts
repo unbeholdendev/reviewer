@@ -73,7 +73,7 @@ export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment:
   const { base, head } = await forgejo.pull(pr);
   const checkout = await git.checkout(pr, base, head);
   try {
-    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread);
+    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread, forgejo.login);
     await (thread ? forgejo.reply(pr, thread[0], body) : forgejo.comment(pr, body));
   } finally {
     await git.remove(checkout);

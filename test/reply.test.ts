@@ -23,7 +23,7 @@ test("a PR comment mentioning the bot gets 👀, then a reply from the diff and 
     { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
     { adapter: "forgejo", method: "pull", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined] },
+    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined, "reviewer-bot"] },
     { adapter: "forgejo", method: "comment", args: [pr, "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -70,7 +70,7 @@ test("a reply in a bot thread gets 👀, then an answer in that thread with the 
   expect(writes(calls)).toEqual([
     { adapter: "forgejo", method: "reactComment", args: [pr, 11] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]]] },
+    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]], "reviewer-bot"] },
     { adapter: "forgejo", method: "reply", args: [pr, thread[0], "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);

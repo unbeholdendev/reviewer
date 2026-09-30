@@ -56,6 +56,6 @@ export type Git = {
 };
 export type Claude = {
   review(checkout: Checkout, large: boolean, open: BotComment[], signal: AbortSignal): Promise<Review>;
-  reply(checkout: Checkout, comment: string, thread?: Thread): Promise<Reply>;
+  reply(checkout: Checkout, comment: string, thread: Thread | undefined, login: string): Promise<Reply>;
 };
 export type Adapters = { forgejo: Forgejo; git: Git; claude: Claude };

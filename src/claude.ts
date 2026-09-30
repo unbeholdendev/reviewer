@@ -51,8 +51,8 @@ export const claude: Claude = {
     const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
     return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review, signal);
   },
-  reply({ dir, diff, log, rules }, comment, thread) {
+  reply({ dir, diff, log, rules }, comment, thread, login) {
     const history = thread ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n` : "";
-    return run(dir, `${replyInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`, Reply);
+    return run(dir, `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`, Reply);
   },
 };
