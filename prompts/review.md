@@ -11,6 +11,15 @@ Look for:
 
 Skip style points a formatter or linter would catch.
 
+Only flag a problem when:
+
+- this PR introduced it, not code it only sits next to
+- you can point to the code it breaks, not just guess that something might break
+- the author did not plainly mean to do it
+- the author would fix it if they knew
+
+No findings beats weak findings, but don't stop at the first real one. In each comment, say what inputs or conditions trigger the problem, and don't make it sound worse than it is.
+
 If the Diff heading says "new commits only", you reviewed this PR before and the diff holds only the commits pushed since. "Your open comments" lists what you said last time. Don't repeat those findings. For each one the new commits fix, add it to `addressed`.
 
 If the Diff heading says "large PR", don't try to cover every file. Focus on the key files: core logic, security-sensitive code and public interfaces.
