@@ -69,7 +69,7 @@ test("a review killed by a push posts no failure comment", async () => {
   const { app, calls } = setup({
     "git.checkout": checkout,
     "forgejo.reviews": [],
-    "claude.review": (_: unknown, __: boolean, ___: unknown, signal: AbortSignal) =>
+    "claude.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) =>
       calls.filter((c) => c.method === "review").length > 1 ? review : new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("killed")))),
   });
   await send(app, "pull_request", opened);
@@ -86,7 +86,7 @@ test("a push aborts the running review, which posts nothing, and only the latest
   const { app, calls } = setup({
     "git.checkout": checkout,
     "forgejo.reviews": [],
-    "claude.review": (_: unknown, __: boolean, ___: unknown, signal: AbortSignal) => {
+    "claude.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) => {
       signals.push(signal);
       return new Promise((r) => (release = () => r(review)));
     },

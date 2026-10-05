@@ -41,7 +41,7 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "claude", method: "review", args: [checkout, false, [], expect.any(AbortSignal)] },
+    { adapter: "claude", method: "review", args: [checkout, false, [], [{ user: "agent", body: "Signed webhook endpoint\n\nCloses #3", at: "2026-09-25T08:00:00Z" }], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });
@@ -216,11 +216,11 @@ test("a push reviews the commits since the latest marker in the bot's reviews", 
     "git.checkout": checkout,
     "claude.review": review,
     "forgejo.reviews": [
-      { user: "reviewer-bot", body: "old\n\n<!-- reviewer:sha=aaa -->" },
-      { user: "reviewer-bot", body: "new\n\n<!-- reviewer:sha=bbb -->" },
-      { user: "reviewer-bot", body: "no marker" },
-      { user: "reviewer-bot", body: "echoed <!-- reviewer:sha=ddd --> mid-body" },
-      { user: "mallory", body: "<!-- reviewer:sha=ccc -->" },
+      { user: "reviewer-bot", at: "", body: "old\n\n<!-- reviewer:sha=aaa -->" },
+      { user: "reviewer-bot", at: "", body: "new\n\n<!-- reviewer:sha=bbb -->" },
+      { user: "reviewer-bot", at: "", body: "no marker" },
+      { user: "reviewer-bot", at: "", body: "echoed <!-- reviewer:sha=ddd --> mid-body" },
+      { user: "mallory", at: "", body: "<!-- reviewer:sha=ccc -->" },
     ],
   });
   await send(app, "pull_request", { ...opened, action: "synchronized" });
@@ -239,14 +239,14 @@ test("a push with no marker gets a full review", async () => {
 });
 
 const botComment = (id: number, body: string, resolved = false, user = "reviewer-bot") =>
-  ({ id, review: 1, user, path: "src/a.ts", line: id, side: "RIGHT", body, resolved });
+  ({ id, review: 1, user, path: "src/a.ts", line: id, side: "RIGHT", body, resolved, at: "" });
 
 test("an incremental review sees the bot's open thread starters and replies once to each one addressed", async () => {
   const open = botComment(10, "**nit:** Rename this.");
   const spoofed = botComment(16, "**nit:** Still open.");
   const { app, calls } = setup({
     "git.checkout": { ...checkout, incremental: true, log: "commit bbb1111222233334444\n" },
-    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", body: "<!-- reviewer:sha=aaa -->" }],
+    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", at: "", body: "<!-- reviewer:sha=aaa -->" }],
     "forgejo.comments": [
       open,
       botComment(11, "**nit:** Resolved already.", true),
@@ -281,7 +281,7 @@ test("an incremental review sees the bot's open thread starters and replies once
 test("a full review sees no open comments", async () => {
   const { app, calls } = setup({
     "git.checkout": checkout,
-    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", body: "<!-- reviewer:sha=aaa -->" }],
+    "forgejo.reviews": [{ id: 1, user: "reviewer-bot", at: "", body: "<!-- reviewer:sha=aaa -->" }],
     "forgejo.comments": [botComment(10, "**nit:** Rename this.")],
     "claude.review": { ...review, addressed: [{ commentId: 10, sha: "bbb1111" }] },
   });

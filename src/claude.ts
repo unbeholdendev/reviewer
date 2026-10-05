@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CLAUDE_CODE_OAUTH_TOKEN } from "./env";
-import { type Claude, Reply, Review } from "./types";
+import { type Claude, type Note, Reply, Review } from "./types";
 
 const prompt = (name: string) => Bun.file(new URL(`../prompts/${name}.md`, import.meta.url)).text();
 const [reviewInstructions, replyInstructions] = await Promise.all([prompt("review"), prompt("reply")]);
@@ -45,14 +45,16 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
   return parsed.data.structured_output;
 }
 
+const notes = (conversation: Note[]) => conversation.map(({ user, path, line, body }) => `- ${JSON.stringify({ user, path, line, body })}`).join("\n");
+
 export const claude: Claude = {
-  review({ dir, diff, log, rules, incremental }, large, open, signal) {
+  review({ dir, diff, log, rules, incremental }, large, open, conversation, signal) {
     const comments = open.map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`).join("\n");
     const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
-    return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review, signal);
+    return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review, signal);
   },
-  reply({ dir, diff, log, rules }, comment, thread, login) {
+  reply({ dir, diff, log, rules }, comment, thread, conversation, login) {
     const history = thread ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n` : "";
-    return run(dir, `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`, Reply);
+    return run(dir, `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`, Reply);
   },
 };

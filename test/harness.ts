@@ -5,7 +5,8 @@ import { createApp } from "../src/app";
 
 type Call = { adapter: string; method: string; args: unknown[] };
 
-export function setup(returns: Record<string, unknown> = {}) {
+export function setup(overrides: Record<string, unknown> = {}) {
+  const returns: Record<string, unknown> = { "forgejo.reviews": [], "forgejo.comments": [], "forgejo.issueComments": [], ...overrides };
   const calls: Call[] = [];
   const fake = (adapter: string, props: Record<string | symbol, unknown> = {}): any =>
     new Proxy(props, {

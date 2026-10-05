@@ -3,7 +3,8 @@ import { send, setup } from "./harness";
 
 const pr = { owner: "unbeholden", repo: "reviewer", number: 27 };
 const checkout = { dir: "/wt", diff: "diff --git a/x b/x\n", log: "", rules: "" };
-const shas = { base: "b".repeat(40), head: "c".repeat(40) };
+const description = { user: "alice", body: "Add x\n\nWhy.", at: "2026-01-01T00:00:00Z" };
+const shas = { base: "b".repeat(40), head: "c".repeat(40), description };
 const mention = {
   action: "created",
   is_pull: true,
@@ -22,8 +23,9 @@ test("a PR comment mentioning the bot gets 👀, then a reply from the diff and 
     { adapter: "forgejo", method: "reviews", args: [pr] },
     { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
     { adapter: "forgejo", method: "pull", args: [pr] },
+    { adapter: "forgejo", method: "issueComments", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined, "reviewer-bot"] },
+    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined, [description], "reviewer-bot"] },
     { adapter: "forgejo", method: "comment", args: [pr, "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -53,11 +55,11 @@ test("comments that don't mention the bot, edits, and issue comments are ignored
   expect(calls.filter((c) => !["reviews", "comments"].includes(c.method))).toEqual([]);
 });
 
-const botComment = (id: number, user: string, body: string) => ({ id, review: 5, user, path: "src/x.ts", line: 3, side: "RIGHT", body, resolved: false });
+const botComment = (id: number, user: string, body: string) => ({ id, review: 5, user, path: "src/x.ts", line: 3, side: "RIGHT", body, resolved: false, at: "" });
 const thread = [botComment(10, "reviewer-bot", "**nit:** rename this"), botComment(11, "alice", "to what?"), botComment(12, "bob", "elsewhere")];
 const threadReturns = {
   ...returns,
-  "forgejo.reviews": [{ id: 4, user: "alice", body: "" }, { id: 5, user: "reviewer-bot", body: "" }],
+  "forgejo.reviews": [{ id: 4, user: "alice", at: "", body: "" }, { id: 5, user: "reviewer-bot", at: "", body: "" }],
   "forgejo.comments": (_: unknown, review: number) => (review === 5 ? [...thread, { ...botComment(13, "bob", "other line"), line: 9 }] : []),
 };
 const threadReply = { ...mention, comment: { ...mention.comment, id: 11, body: "to what?" } };
@@ -70,7 +72,7 @@ test("a reply in a bot thread gets 👀, then an answer in that thread with the 
   expect(writes(calls)).toEqual([
     { adapter: "forgejo", method: "reactComment", args: [pr, 11] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]], "reviewer-bot"] },
+    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]], [...thread, { ...botComment(13, "bob", "other line"), line: 9 }, description], "reviewer-bot"] },
     { adapter: "forgejo", method: "reply", args: [pr, thread[0], "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -104,8 +106,10 @@ test("\"@bot review again\" gets 👀 and a full base..head review, ignoring the
   expect(calls.filter((c) => c.method !== "createReview")).toEqual([
     { adapter: "forgejo", method: "pull", args: [pr] },
     { adapter: "forgejo", method: "reactComment", args: [pr, 99] },
+    { adapter: "forgejo", method: "reviews", args: [pr] },
+    { adapter: "forgejo", method: "issueComments", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head, undefined] },
-    { adapter: "claude", method: "review", args: [checkout, false, [], expect.any(AbortSignal)] },
+    { adapter: "claude", method: "review", args: [checkout, false, [], [description], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
   expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);

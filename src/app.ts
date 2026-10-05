@@ -88,6 +88,10 @@ const PullRequestEvent = z.object({
     labels: z.array(z.object({ name: z.string() })).nullish(),
     base: z.object({ sha: z.string() }),
     head: z.object({ sha: z.string() }),
+    user: z.object({ login: z.string() }).nullable(),
+    title: z.string(),
+    body: z.string(),
+    created_at: z.string(),
   }),
   repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
 });
@@ -117,7 +121,9 @@ function handle(adapters: Adapters, event: string | undefined, payload: unknown)
   const pushed = action === "synchronized";
   if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted || pushed)) return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
-  return { pr, cancellable: true, pushed, run: (signal) => review(adapters, pr, pull_request.base.sha, pull_request.head.sha, pushed, signal) };
+  const { base, head, user, title, body, created_at } = pull_request;
+  const pull = { base: base.sha, head: head.sha, description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at } };
+  return { pr, cancellable: true, pushed, run: (signal) => review(adapters, pr, pull, pushed, signal) };
 }
 
 function commented(adapters: Adapters, payload: unknown): Job | undefined {
@@ -136,8 +142,7 @@ function commented(adapters: Adapters, payload: unknown): Job | undefined {
     pr,
     cancellable: true,
     async run(signal) {
-      const { base, head } = await adapters.forgejo.pull(pr);
-      await review(adapters, pr, base, head, false, signal, comment.id);
+      await review(adapters, pr, await adapters.forgejo.pull(pr), false, signal, comment.id);
       if (/\w/.test(rest) && !signal.aborted) await reply(adapters, pr, comment, true);
     },
   };

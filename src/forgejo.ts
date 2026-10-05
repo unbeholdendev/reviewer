@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { FORGEJO_TOKEN, FORGEJO_URL } from "./env";
-import { type Forgejo, ForgejoCreated, ForgejoPull, ForgejoReview, ForgejoReviewComment, ForgejoUser } from "./types";
+import { type Forgejo, ForgejoCreated, ForgejoIssueComment, ForgejoPull, ForgejoReview, ForgejoReviewComment, ForgejoUser } from "./types";
 
 const headers = { Authorization: `token ${FORGEJO_TOKEN}`, "Content-Type": "application/json" };
 
@@ -22,8 +22,8 @@ export const forgejo: Forgejo = {
     await api(`/repos/${owner}/${repo}/issues/comments/${comment}/reactions`, z.unknown(), { content: "eyes" });
   },
   async pull({ owner, repo, number }) {
-    const { base, head } = await api(`/repos/${owner}/${repo}/pulls/${number}`, ForgejoPull);
-    return { base: base.sha, head: head.sha };
+    const { base, head, user, title, body, created_at } = await api(`/repos/${owner}/${repo}/pulls/${number}`, ForgejoPull);
+    return { base: base.sha, head: head.sha, description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at } };
   },
   async comment({ owner, repo, number }, body) {
     await api(`/repos/${owner}/${repo}/issues/${number}/comments`, ForgejoCreated, { body });
@@ -36,7 +36,7 @@ export const forgejo: Forgejo = {
     for (let page = 1; ; page++) {
       const batch = await api(`/repos/${owner}/${repo}/pulls/${number}/reviews?page=${page}&limit=50`, z.array(ForgejoReview));
       // page order isn't documented, and the latest marker must win
-      if (!batch.length) return all.sort((a, b) => a.id - b.id).map((r) => ({ id: r.id, user: r.user?.login ?? "", body: r.body }));
+      if (!batch.length) return all.sort((a, b) => a.id - b.id).map((r) => ({ id: r.id, user: r.user?.login ?? "", body: r.body, at: r.submitted_at }));
       all.push(...batch);
     }
   },
@@ -51,6 +51,7 @@ export const forgejo: Forgejo = {
       side: c.position ? "RIGHT" : "LEFT",
       body: c.body,
       resolved: !!c.resolver,
+      at: c.created_at,
     }));
   },
   async reply({ owner, repo, number }, { review, path, line, side }, body) {
@@ -60,5 +61,9 @@ export const forgejo: Forgejo = {
       body,
       [side === "RIGHT" ? "new_position" : "old_position"]: line,
     });
+  },
+  async issueComments({ owner, repo, number }) {
+    const all = await api(`/repos/${owner}/${repo}/issues/${number}/comments`, z.array(ForgejoIssueComment));
+    return all.map((c) => ({ user: c.user?.login ?? "", body: c.body, at: c.created_at }));
   },
 };
