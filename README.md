@@ -11,7 +11,7 @@ A code review bot for Forgejo. It reviews pull requests with Claude Code and ans
 - Skips PRs labelled `no-review`, and lockfiles and vendored code.
 - Reacts 👀 when it starts.
 
-It reads `REVIEW.md` and `CLAUDE.md` from the PR base as the repository's rules.
+It reads `REVIEW.md`, `AGENTS.md` and `CLAUDE.md` from the PR base as the repository's rules.
 
 ## Safety
 

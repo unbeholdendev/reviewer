@@ -7,15 +7,24 @@ Look for:
 - bugs and wrong behaviour
 - security problems
 - missing error handling where it matters
-- code that breaks the repository rules below
+- code that breaks the repository rules below, or the conventions the surrounding code follows
+- more code than the task needs
+
+Less code is less to maintain. Ask of each change whether fewer lines, files or concepts would do the same job:
+
+- code that repeats what the repo or a dependency already has
+- helpers, layers, options or files the task did not need
+- checks and branches for cases that cannot happen
+- dead code, leftover debugging, comments that restate the code
+- a file or function doing several jobs that should be split, or a split that adds files for no gain
 
 Skip style points a formatter or linter would catch.
 
 Only flag a problem when:
 
 - this PR introduced it, not code it only sits next to
-- you can point to the code it breaks, not just guess that something might break
-- the author did not plainly mean to do it
+- you can point to it: the code a bug breaks, or the shorter code that would do the same job
+- the commits don't explain it as a deliberate choice
 - the author would fix it if they knew
 
 No findings beats weak findings, but don't stop at the first real one. In each comment, say what inputs or conditions trigger the problem, and don't make it sound worse than it is.
@@ -34,8 +43,8 @@ Return:
   - `line`: line number in that file
   - `side`: `RIGHT` for a line in the new code, `LEFT` for a removed line
   - `body`: the finding, short
-  - `severity`: `blocking` if it should not merge as is, else `nit`
-- `recommendation`: `blocking` if it should not merge as is, `nits` if only small fixes are left, `looks-good` if there is nothing to fix.
+  - `severity`: `blocking` if it should not merge as is, else `nit`. Extra code is a `nit` unless it adds a file, layer or option the task did not need.
+- `recommendation`: `blocking` if it should not merge as is, `nits` if only small fixes are left, `looks-good` only if `comments` is empty.
 - `addressed`: one per open comment the new commits fix, else empty.
   - `commentId`: the comment's id
   - `sha`: the commit from Commits that fixes it
