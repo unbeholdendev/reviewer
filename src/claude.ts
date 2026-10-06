@@ -22,7 +22,7 @@ const Stats = z.object({
   modelUsage: z.record(z.string(), z.unknown()).optional(),
 });
 
-async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
+async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?: AbortSignal, retry = true): Promise<T> {
   const proc = Bun.spawn([...args, "--json-schema", JSON.stringify(z.toJSONSchema(schema, { target: "draft-7" }))], {
     cwd: dir,
     // no FORGEJO_TOKEN or WEBHOOK_SECRET for Claude to leak
@@ -36,6 +36,10 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
   });
   console.log(`claude started in ${dir}, prompt ${prompt.length} chars`);
   const [out, err, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
+  if (code && retry && out.includes('"subtype":"error_max_structured_output_retries"')) {
+    console.log("claude gave no valid structured output, retrying");
+    return run(dir, prompt, schema, signal, false);
+  }
   if (code) throw new Error(`claude exited ${code}: ${err || out}`);
   const json = JSON.parse(out);
   const stats = Stats.safeParse(json).data;
