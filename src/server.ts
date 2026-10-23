@@ -1,6 +1,6 @@
 import { createApp } from "./app";
-import { claude } from "./claude";
+import { agent } from "./agent";
 import { forgejo } from "./forgejo";
 import { git } from "./git";
 
-export default createApp({ forgejo, git, claude });
+export default createApp({ forgejo, git, agent });

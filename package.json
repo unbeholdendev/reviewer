@@ -3,6 +3,8 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "hono": "^4.13.9",
     "zod": "^4.6.5"
   },

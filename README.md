@@ -1,6 +1,6 @@
 # reviewer
 
-A code review bot for Forgejo. It reviews pull requests with Claude Code and answers questions in the comments.
+A code review bot for Forgejo. It reviews pull requests with Pi and answers questions in the comments.
 
 ## What it does
 
@@ -11,16 +11,18 @@ A code review bot for Forgejo. It reviews pull requests with Claude Code and ans
 - Skips PRs labelled `no-review`, and lockfiles and vendored code.
 - Reacts 👀 when it starts.
 
-It reads `REVIEW.md`, `AGENTS.md` and `CLAUDE.md` from the PR base as the repository's rules.
+It reads `REVIEW.md` and `AGENTS.md` from the PR base as the repository's rules.
 
 ## Safety
 
-The PR is untrusted. Claude runs in a checkout of the PR head with only Read, Grep and Glob, in `--safe-mode` so it loads no settings, hooks or skills from the PR, and without the Forgejo token or webhook secret in its environment.
+The PR is untrusted. The bot embeds Pi’s SDK with only `read`, `grep`, `find` and `ls`. These tools reject paths and symlinks outside the checkout. Project settings, context files, extensions, MCP, skills and prompt templates are not loaded. Repository rules come from the PR base, not its head.
+
+Sessions and settings stay in memory. Subscription credentials are stored outside the checkout and refreshed by the SDK. Pi runs inside the server process, not a sandbox. Run the bot in a dedicated container with only the credentials and repositories it needs.
 
 ## Setup
 
 1. Make a Forgejo user for the bot and a token for it with read and write access to repositories and issues.
-2. Get a Claude token with `claude setup-token`.
+2. Use your OpenAI subscription, or set `PI_API_KEY` for API billing.
 3. Copy `.env.example` to `.env` and fill it in:
 
    | Variable | |
@@ -28,19 +30,46 @@ The PR is untrusted. Claude runs in a checkout of the PR head with only Read, Gr
    | `FORGEJO_URL` | your Forgejo, e.g. `https://forgejo.example.com` |
    | `FORGEJO_TOKEN` | the bot user's token |
    | `WEBHOOK_SECRET` | any random string |
-   | `CLAUDE_CODE_OAUTH_TOKEN` | from `claude setup-token` |
+   | `PI_MODEL` | exact `provider/model-id` from Pi’s built-in catalog; defaults to `openai/gpt-6.1-sol` (GPT-6.1 SOL) |
+   | `PI_AUTH_FILE` | subscription credential file, default `credentials/auth.json` |
+   | `PI_API_KEY` | optional API key; if set, saved credentials are not read |
    | `CONCURRENCY` | reviews at once, default 2 |
 
-4. Run it: `docker compose up -d`. It listens on port 3000.
+4. Run `./deploy.sh` in a terminal. It pulls the image, checks authentication, asks you to sign in if needed, then starts the bot on port 3000.
 5. Give the bot user access to each repository, and add a webhook to it (or to the org):
    - URL: `http://<host>:3000/webhook`
    - Content type: `application/json`
    - Secret: `WEBHOOK_SECRET`
    - Events: Pull request, Pull request synchronized, and Pull request comments (not Issue comments)
 
+## Deployment and subscription login
+
+Run `./deploy.sh` on the deployment host. Docker Compose is the only host dependency; Pi’s SDK handles login inside a one-off container.
+
+- A usable saved subscription login is reused without prompting. Expired tokens are refreshed and saved.
+- If the login is missing or cannot be refreshed, the command prints an OpenAI sign-in URL. Open it in your browser and sign in with your subscribed account.
+- The browser redirects to a localhost URL. Because login runs in a container, that page may not load. Copy the full final URL from the browser’s address bar and paste it into the deployment terminal. No callback port needs to be exposed.
+- Only after login succeeds does deployment start or update the service. A failed or cancelled login leaves an already running service alone.
+
+Unattended deployment works with usable saved credentials or `PI_API_KEY`. If a new subscription login is needed without a terminal, deployment fails with an instruction to rerun interactively rather than hanging.
+
+The login check can also be run on its own:
+
+```sh
+docker compose run --rm reviewer bun src/login.ts
+```
+
+Do not commit or share the credential files, or reuse them in another agent. The check resolves credentials and refreshes expired tokens; it does not make a model request. To force a fresh login before token expiry, remove only `credentials/auth.json` and rerun `./deploy.sh`. Keep `device-id`.
+
+Leave `PI_API_KEY` unset or empty. The default model is `openai/gpt-6.1-sol`. The SDK uses the subscription login, refreshes access tokens, and saves rotated credentials. Your plan’s limits and OpenAI’s terms still apply.
+
+Compose mounts only `./credentials` at `/app/credentials`. It holds `auth.json` and a stable `device-id` required by OpenAI’s login flow. The directory must stay writable for token refresh and file locks. This persists the login across container restarts without mounting Pi’s configuration or sessions. No Pi CLI is installed or run.
+
+For API billing instead, set `PI_API_KEY` to a key from [OpenAI API keys](https://platform.openai.com/api-keys), or from your chosen provider. This bypasses the credential file; API usage is billed separately from your subscription.
+
 ## Development
 
-Needs [Bun](https://bun.sh), git and the `claude` CLI.
+Needs [Bun](https://bun.sh), git, ripgrep and fd (`fd-find` on Debian). Pi is a pinned application dependency. Set the variables above in `.env`.
 
 ```sh
 bun install

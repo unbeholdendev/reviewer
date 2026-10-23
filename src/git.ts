@@ -46,7 +46,7 @@ export const git: Git = {
       const diff = await run("-C", mirror, "diff", from ? `${from}..${head}` : `${base}...${head}`);
       const log = await run("-C", mirror, "log", `${from || base}..${head}`);
       const rules = await Promise.all(
-        ["REVIEW.md", "AGENTS.md", "CLAUDE.md"].map((f) => run("-C", mirror, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
+        ["REVIEW.md", "AGENTS.md"].map((f) => run("-C", mirror, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
       );
       const dir = join(root, "worktrees", randomUUID());
       await run("-C", mirror, "worktree", "add", "--detach", dir, head);

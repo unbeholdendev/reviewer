@@ -15,7 +15,7 @@ test("at most CONCURRENCY jobs run at once under a burst of webhooks", async () 
       return new Promise((r) => release.push(() => r(checkout)));
     },
     "git.remove": () => void running--,
-    "claude.review": review,
+    "agent.review": review,
   });
   await Promise.all(Array.from({ length: 5 }, (_, i) => send(app, "pull_request", { ...opened, number: i })));
   const done = app.idle();
@@ -36,7 +36,7 @@ test("jobs on one PR never overlap", async () => {
       return checkout;
     },
     "git.remove": () => void running--,
-    "claude.review": review,
+    "agent.review": review,
   });
   await send(app, "pull_request", opened);
   await send(app, "pull_request", { ...opened, action: "reopened" });
@@ -51,7 +51,7 @@ test("a push aborts every review of that PR, not only the last one queued", asyn
   const { app, calls } = setup({
     "git.checkout": checkout,
     "forgejo.reviews": [],
-    "claude.review": () => new Promise((r) => (release = () => r(review))),
+    "agent.review": () => new Promise((r) => (release = () => r(review))),
   });
   await send(app, "pull_request", opened);
   while (!calls.some((c) => c.method === "review")) await Bun.sleep(1);
@@ -69,7 +69,7 @@ test("a review killed by a push posts no failure comment", async () => {
   const { app, calls } = setup({
     "git.checkout": checkout,
     "forgejo.reviews": [],
-    "claude.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) =>
+    "agent.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) =>
       calls.filter((c) => c.method === "review").length > 1 ? review : new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("killed")))),
   });
   await send(app, "pull_request", opened);
@@ -86,7 +86,7 @@ test("a push aborts the running review, which posts nothing, and only the latest
   const { app, calls } = setup({
     "git.checkout": checkout,
     "forgejo.reviews": [],
-    "claude.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) => {
+    "agent.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) => {
       signals.push(signal);
       return new Promise((r) => (release = () => r(review)));
     },

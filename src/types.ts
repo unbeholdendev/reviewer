@@ -66,8 +66,8 @@ export type Git = {
   checkout(pr: PR, base: string, head: string, since?: string): Promise<Checkout>;
   remove(checkout: Checkout): Promise<void>;
 };
-export type Claude = {
+export type Agent = {
   review(checkout: Checkout, large: boolean, open: BotComment[], conversation: Note[], signal: AbortSignal): Promise<Review>;
   reply(checkout: Checkout, comment: string, thread: Thread | undefined, conversation: Note[], login: string): Promise<Reply>;
 };
-export type Adapters = { forgejo: Forgejo; git: Git; claude: Claude };
+export type Adapters = { forgejo: Forgejo; git: Git; agent: Agent };

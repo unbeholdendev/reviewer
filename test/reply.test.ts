@@ -13,7 +13,7 @@ const mention = {
   repository: { name: "reviewer", owner: { login: "unbeholden" } },
   sender: { login: "alice" },
 };
-const returns = { "forgejo.reviews": [], "forgejo.pull": shas, "git.checkout": checkout, "claude.reply": { body: "Because." } };
+const returns = { "forgejo.reviews": [], "forgejo.pull": shas, "git.checkout": checkout, "agent.reply": { body: "Because." } };
 
 test("a PR comment mentioning the bot gets 👀, then a reply from the diff and comment", async () => {
   const { app, calls } = setup(returns);
@@ -25,7 +25,7 @@ test("a PR comment mentioning the bot gets 👀, then a reply from the diff and 
     { adapter: "forgejo", method: "pull", args: [pr] },
     { adapter: "forgejo", method: "issueComments", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, mention.comment.body, undefined, [description], "reviewer-bot"] },
+    { adapter: "agent", method: "reply", args: [checkout, mention.comment.body, undefined, [description], "reviewer-bot"] },
     { adapter: "forgejo", method: "comment", args: [pr, "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -72,7 +72,7 @@ test("a reply in a bot thread gets 👀, then an answer in that thread with the 
   expect(writes(calls)).toEqual([
     { adapter: "forgejo", method: "reactComment", args: [pr, 11] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head] },
-    { adapter: "claude", method: "reply", args: [checkout, "to what?", [thread[0]], [...thread, { ...botComment(13, "bob", "other line"), line: 9 }, description], "reviewer-bot"] },
+    { adapter: "agent", method: "reply", args: [checkout, "to what?", [thread[0]], [...thread, { ...botComment(13, "bob", "other line"), line: 9 }, description], "reviewer-bot"] },
     { adapter: "forgejo", method: "reply", args: [pr, thread[0], "Because."] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
@@ -83,7 +83,7 @@ test("a mention in a bot thread is answered in the thread", async () => {
   await send(app, "issue_comment", { ...threadReply, comment: { ...threadReply.comment, body: "@reviewer-bot to what?" } });
   await app.idle();
   expect(calls.filter((c) => c.method === "comment")).toEqual([]);
-  expect(calls.filter((c) => c.method === "reply").map((c) => c.adapter)).toEqual(["claude", "forgejo"]);
+  expect(calls.filter((c) => c.method === "reply").map((c) => c.adapter)).toEqual(["agent", "forgejo"]);
 });
 
 test("replies in threads the bot didn't start are ignored", async () => {
@@ -100,7 +100,7 @@ const review = { summary: "Fine.", recommendation: "looks-good", comments: [], a
 const again = (body: string) => ({ ...mention, comment: { ...mention.comment, body } });
 
 test("\"@bot review again\" gets 👀 and a full base..head review, ignoring the SHA marker", async () => {
-  const { app, calls } = setup({ ...returns, "claude.review": review });
+  const { app, calls } = setup({ ...returns, "agent.review": review });
   await send(app, "issue_comment", again("@reviewer-bot, review again"));
   await app.idle();
   expect(calls.filter((c) => c.method !== "createReview")).toEqual([
@@ -109,23 +109,23 @@ test("\"@bot review again\" gets 👀 and a full base..head review, ignoring the
     { adapter: "forgejo", method: "reviews", args: [pr] },
     { adapter: "forgejo", method: "issueComments", args: [pr] },
     { adapter: "git", method: "checkout", args: [pr, shas.base, shas.head, undefined] },
-    { adapter: "claude", method: "review", args: [checkout, false, [], [description], expect.any(AbortSignal)] },
+    { adapter: "agent", method: "review", args: [checkout, false, [], [description], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
   expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
 });
 
 test("text after \"review again\" is also answered as a question", async () => {
-  const { app, calls } = setup({ ...returns, "claude.review": review });
+  const { app, calls } = setup({ ...returns, "agent.review": review });
   const body = "@Reviewer-Bot review again, and why is this safe?";
   await send(app, "issue_comment", again(body));
   await app.idle();
-  expect(calls.filter((c) => c.adapter === "claude").map((c) => [c.method, c.args[1]])).toEqual([["review", false], ["reply", body]]);
+  expect(calls.filter((c) => c.adapter === "agent").map((c) => [c.method, c.args[1]])).toEqual([["review", false], ["reply", body]]);
   expect(calls.filter((c) => c.method === "comment")).toEqual([{ adapter: "forgejo", method: "comment", args: [pr, "Because."] }]);
 });
 
 test("\"review again\" without the mention is not a command", async () => {
-  const { app, calls } = setup({ ...returns, "claude.review": review });
+  const { app, calls } = setup({ ...returns, "agent.review": review });
   await send(app, "issue_comment", again("please review again"));
   await app.idle();
   expect(writes(calls)).toEqual([]);

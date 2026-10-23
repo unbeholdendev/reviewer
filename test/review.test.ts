@@ -8,7 +8,7 @@ const checkout = { dir: "/wt", diff: "", log: "", rules: "" };
 const marker = `\n\n<!-- reviewer:sha=${opened.pull_request.head.sha} -->`;
 
 test("an opened PR gets a COMMENT review with the summary and recommendation", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.filter((c) => c.method === "createReview")).toEqual([
@@ -21,14 +21,14 @@ test("an opened PR gets a COMMENT review with the summary and recommendation", a
 });
 
 test("a reopened PR gets a review", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", { ...opened, action: "reopened" });
   await app.idle();
   expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
 });
 
 test("other PR actions and other events run no job", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", { ...opened, action: "closed" });
   await send(app, "issues", opened);
   await app.idle();
@@ -36,12 +36,12 @@ test("other PR actions and other events run no job", async () => {
 });
 
 test("the review runs in a checkout of the PR head, removed afterwards", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "claude", method: "review", args: [checkout, false, [], [{ user: "agent", body: "Signed webhook endpoint\n\nCloses #3", at: "2026-09-25T08:00:00Z" }], expect.any(AbortSignal)] },
+    { adapter: "agent", method: "review", args: [checkout, false, [], [{ user: "agent", body: "Signed webhook endpoint\n\nCloses #3", at: "2026-09-25T08:00:00Z" }], expect.any(AbortSignal)] },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });
@@ -49,7 +49,7 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
 test("the checkout is removed when the review fails", async () => {
   const { app, calls } = setup({
     "git.checkout": checkout,
-    "claude.review": () => Promise.reject(new Error("claude failed")),
+    "agent.review": () => Promise.reject(new Error("agent failed")),
   });
   await send(app, "pull_request", opened);
   await app.idle();
@@ -74,7 +74,7 @@ test("comments on diff lines go inline, others move into the summary", async () 
     { path: "src/a.ts", line: 40, side: "RIGHT", body: "Far away.", severity: "nit" },
     { path: "src/b.ts", line: 1, side: "RIGHT", body: "Not in diff.", severity: "blocking" },
   ];
-  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": { ...review, comments } });
+  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "agent.review": { ...review, comments } });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.find((c) => c.method === "createReview")?.args[1]).toEqual({
@@ -112,10 +112,10 @@ test("lockfiles and vendored files are not reviewed and get no comments", async 
     { path: "bun.lock", line: 1, side: "RIGHT", body: "Lock.", severity: "nit" },
     { path: "vendor/lib/x.go", line: 1, side: "RIGHT", body: "Vendored.", severity: "nit" },
   ];
-  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": { ...review, comments } });
+  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "agent.review": { ...review, comments } });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[0]).toEqual({ ...checkout, diff: `${kept}\n` });
+  expect(calls.find((c) => c.adapter === "agent")?.args[0]).toEqual({ ...checkout, diff: `${kept}\n` });
   expect(calls.find((c) => c.method === "createReview")?.args[1]).toEqual({
     event: "COMMENT",
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
@@ -124,14 +124,14 @@ test("lockfiles and vendored files are not reviewed and get no comments", async 
 });
 
 test("a draft PR is not reviewed", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", { ...opened, pull_request: { ...opened.pull_request, draft: true } });
   await app.idle();
   expect(calls).toEqual([]);
 });
 
 test("a PR that comes out of draft gets a review, other title edits do not", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   const edited = (from: string) => ({ ...opened, action: "edited", changes: { title: { from } } });
   await send(app, "pull_request", edited("Rename thing"));
   await send(app, "pull_request", { ...edited("WIP: x"), pull_request: { ...opened.pull_request, draft: true } });
@@ -145,7 +145,7 @@ test("a PR that comes out of draft gets a review, other title edits do not", asy
 });
 
 test("a PR labelled no-review runs no job", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   const pull_request = { ...opened.pull_request, labels: [{ name: "bug" }, { name: "no-review" }] };
   await send(app, "pull_request", { ...opened, pull_request });
   await send(app, "pull_request", { ...opened, action: "reopened", pull_request });
@@ -159,10 +159,10 @@ const lines = (path: string, n: number) =>
 
 test("a PR over 3000 changed lines gets a partial review with a note", async () => {
   const diff = lines("src/a.ts", 3001);
-  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "agent.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(true);
+  expect(calls.find((c) => c.adapter === "agent")?.args[1]).toBe(true);
   expect(calls.find((c) => c.method === "createReview")?.args[1]).toMatchObject({
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.\n\n_Partial review: this PR has 3001 changed lines, so only the key files were reviewed._${marker}`,
   });
@@ -170,17 +170,17 @@ test("a PR over 3000 changed lines gets a partial review with a note", async () 
 
 test("filtered files do not count towards the large-PR threshold", async () => {
   const diff = [lines("bun.lock", 5000), lines("src/a.ts", 3000)].join("\n");
-  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": { ...checkout, diff }, "agent.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[1]).toBe(false);
+  expect(calls.find((c) => c.adapter === "agent")?.args[1]).toBe(false);
   expect(calls.find((c) => c.method === "createReview")?.args[1]).toMatchObject({
     body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`,
   });
 });
 
 test("the PR gets a 👀 reaction before the review starts", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls[0]).toEqual({ adapter: "forgejo", method: "react", args: [pr] });
@@ -190,7 +190,7 @@ test("a failed reaction does not stop the review", async () => {
   const { app, calls } = setup({
     "forgejo.react": () => Promise.reject(new Error("no permission")),
     "git.checkout": checkout,
-    "claude.review": review,
+    "agent.review": review,
   });
   await send(app, "pull_request", opened);
   await app.idle();
@@ -198,14 +198,14 @@ test("a failed reaction does not stop the review", async () => {
 });
 
 test("a PR payload that fails validation runs no job", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", { ...opened, repository: { name: "reviewer" } });
   await app.idle();
   expect(calls).toEqual([]);
 });
 
 test("the bot's own events run no job", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review });
   await send(app, "pull_request", { ...opened, sender: { login: "reviewer-bot" } });
   await app.idle();
   expect(calls).toEqual([]);
@@ -214,7 +214,7 @@ test("the bot's own events run no job", async () => {
 test("a push reviews the commits since the latest marker in the bot's reviews", async () => {
   const { app, calls } = setup({
     "git.checkout": checkout,
-    "claude.review": review,
+    "agent.review": review,
     "forgejo.reviews": [
       { user: "reviewer-bot", at: "", body: "old\n\n<!-- reviewer:sha=aaa -->" },
       { user: "reviewer-bot", at: "", body: "new\n\n<!-- reviewer:sha=bbb -->" },
@@ -231,7 +231,7 @@ test("a push reviews the commits since the latest marker in the bot's reviews", 
 });
 
 test("a push with no marker gets a full review", async () => {
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": review, "forgejo.reviews": [] });
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": review, "forgejo.reviews": [] });
   await send(app, "pull_request", { ...opened, action: "synchronized" });
   await app.idle();
   const { base, head } = opened.pull_request;
@@ -257,7 +257,7 @@ test("an incremental review sees the bot's open thread starters and replies once
       spoofed,
       { ...botComment(17, "Rename it to `load`."), line: 10 },
     ],
-    "claude.review": {
+    "agent.review": {
       ...review,
       addressed: [
         { commentId: 10, sha: "bbb1111" },
@@ -272,7 +272,7 @@ test("an incremental review sees the bot's open thread starters and replies once
   });
   await send(app, "pull_request", { ...opened, action: "synchronized" });
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toEqual([open, spoofed]);
+  expect(calls.find((c) => c.adapter === "agent")?.args[2]).toEqual([open, spoofed]);
   expect(calls.filter((c) => c.method === "reply").map((c) => c.args)).toEqual([
     [pr, open, "Fixed in bbb1111.\n\n<!-- reviewer:fixed=10 -->"],
   ]);
@@ -283,11 +283,11 @@ test("a full review sees no open comments", async () => {
     "git.checkout": checkout,
     "forgejo.reviews": [{ id: 1, user: "reviewer-bot", at: "", body: "<!-- reviewer:sha=aaa -->" }],
     "forgejo.comments": [botComment(10, "**nit:** Rename this.")],
-    "claude.review": { ...review, addressed: [{ commentId: 10, sha: "bbb1111" }] },
+    "agent.review": { ...review, addressed: [{ commentId: 10, sha: "bbb1111" }] },
   });
   await send(app, "pull_request", { ...opened, action: "synchronized" });
   await app.idle();
-  expect(calls.find((c) => c.adapter === "claude")?.args[2]).toEqual([]);
+  expect(calls.find((c) => c.adapter === "agent")?.args[2]).toEqual([]);
   expect(calls.filter((c) => c.method === "reply")).toEqual([]);
 });
 
@@ -300,7 +300,7 @@ test("an incremental review moves comments on removed lines into the summary", a
   const { app, calls } = setup({
     "git.checkout": { ...checkout, diff, incremental: true },
     "forgejo.reviews": [],
-    "claude.review": { ...review, comments },
+    "agent.review": { ...review, comments },
   });
   await send(app, "pull_request", { ...opened, action: "synchronized" });
   await app.idle();
@@ -312,8 +312,8 @@ test("an incremental review moves comments on removed lines into the summary", a
 
 test("a failed review posts one failure comment and logs the error to stdout", async () => {
   const log = spyOn(console, "log").mockImplementation(() => {});
-  const error = new Error("claude failed");
-  const { app, calls } = setup({ "git.checkout": checkout, "claude.review": () => Promise.reject(error) });
+  const error = new Error("agent failed");
+  const { app, calls } = setup({ "git.checkout": checkout, "agent.review": () => Promise.reject(error) });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.filter((c) => c.method === "comment")).toEqual([

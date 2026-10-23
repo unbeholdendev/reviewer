@@ -1,10 +1,8 @@
 FROM oven/bun:1.4
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git curl ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  && curl -fsSL https://claude.ai/install.sh | bash -s 2.1.280
-ENV PATH=/root/.local/bin:$PATH
+  && apt-get install -y --no-install-recommends git ca-certificates ripgrep fd-find \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json bun.lock ./

@@ -21,7 +21,7 @@ export function setup(overrides: Record<string, unknown> = {}) {
         };
       },
     });
-  const app = createApp({ forgejo: fake("forgejo", { login: "reviewer-bot" }), git: fake("git"), claude: fake("claude") });
+  const app = createApp({ forgejo: fake("forgejo", { login: "reviewer-bot" }), git: fake("git"), agent: fake("agent") });
   return { app, calls };
 }
 

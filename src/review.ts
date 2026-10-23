@@ -19,7 +19,7 @@ export async function review(adapters: Adapters, pr: PR, pull: Pull, pushed: boo
   }
 }
 
-async function run({ forgejo, git, claude }: Adapters, pr: PR, { base, head, description }: Pull, pushed: boolean, signal: AbortSignal, comment?: number) {
+async function run({ forgejo, git, agent }: Adapters, pr: PR, { base, head, description }: Pull, pushed: boolean, signal: AbortSignal, comment?: number) {
   try {
     await (comment ? forgejo.reactComment(pr, comment) : forgejo.react(pr));
   } catch (e) {
@@ -37,7 +37,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, { base, head, des
     const changed = changedLines(diff);
     const large = changed > largePR;
     console.log(`${key(pr)}: reviewing ${checkout.incremental ? `since ${since}` : "full diff"}, ${changed} changed lines, ${open.length} open comments`);
-    const { summary, recommendation, comments: all, addressed } = await claude.review({ ...checkout, diff }, large, open, conversation(description, notes, reviews, threads), signal);
+    const { summary, recommendation, comments: all, addressed } = await agent.review({ ...checkout, diff }, large, open, conversation(description, notes, reviews, threads), signal);
     const comments = all.filter((c) => !skipped(c.path));
     const lines = anchorable(diff);
     // Forgejo numbers removed lines against the PR base, not the last reviewed SHA
@@ -63,7 +63,7 @@ async function run({ forgejo, git, claude }: Adapters, pr: PR, { base, head, des
   }
 }
 
-export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment: { id: number; body: string }, mentioned: boolean) {
+export async function reply({ forgejo, git, agent }: Adapters, pr: PR, comment: { id: number; body: string }, mentioned: boolean) {
   const reviews = await forgejo.reviews(pr);
   const mine = reviews.filter((r) => r.user === forgejo.login);
   // Forgejo files a thread reply under the review that started the thread
@@ -84,7 +84,7 @@ export async function reply({ forgejo, git, claude }: Adapters, pr: PR, comment:
   const checkout = await git.checkout(pr, base, head);
   try {
     const history = conversation(description, notes, reviews, ours, theirs);
-    const { body } = await claude.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread, history, forgejo.login);
+    const { body } = await agent.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread, history, forgejo.login);
     await (thread ? forgejo.reply(pr, thread[0], body) : forgejo.comment(pr, body));
   } finally {
     await git.remove(checkout);
