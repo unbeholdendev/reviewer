@@ -77,3 +77,33 @@ bunx tsc
 bun test
 bun src/server.ts
 ```
+
+### Review quality eval
+
+Run the five real-model cases separately from the offline tests:
+
+```sh
+bun eval/review.ts
+```
+
+This calls `agent.review` with the current prompts and your `PI_MODEL` and `PI_AUTH_FILE` or `PI_API_KEY` settings. It makes model requests and may incur API charges. Use a provider-qualified model such as `openai/gpt-6.1-sol` and the subscription setup above, or an API key. `bun eval/review.ts --help` needs no credentials.
+
+The eval creates local Git repositories, generates diffs and commit logs, and removes each checkout after the review, including on errors. It does not contact Forgejo or fetch Git repositories. Missing Forgejo-only environment variables get inert defaults; model and auth settings are unchanged. Case names and expected findings stay outside the model's input.
+
+The cases in `eval/cases.ts` define these outcomes:
+
+| Case | Expected result |
+|---|---|
+| Cross-file expiry units | Block on the changed calculation: an unchanged caller passes seconds, but the result uses milliseconds. |
+| Deliberate ownership bypass | Block on members deleting another user's document, despite the author's explanation. The checkout's unchanged permissions contract allows only owners and admins. |
+| Clean blank-name handling | `looks-good`, no findings. |
+| Incremental unresolved quota finding | Keep `blocking` without repeating or marking the open finding addressed, even though its file is absent from the new diff. |
+| Incremental fixed quota finding | `looks-good`, no new findings; mark the open finding addressed with the fixing commit's SHA. |
+
+The runner prints each expected outcome, the full actual review, scoring failures and a pass count. Any failed case or error exits nonzero. Bug findings must have blocking severity, the expected file and line region, and text matching every trigger-evidence regex listed in `eval/cases.ts`. Extra findings fail, including on the clean control. These deterministic checks use no LLM judge. Regexes can reject a valid paraphrase or accept a misleading explanation that contains the expected words; read the printed findings before drawing conclusions. Five small cases do not establish general review quality.
+
+Fixture and scoring checks run offline as part of `bun test`, or on their own:
+
+```sh
+bun test eval/review.test.ts
+```
