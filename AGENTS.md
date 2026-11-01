@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Forgejo Issues on `unbeholden/reviewer`, via the Forgejo MCP tools. See `docs/agents/issue-tracker.md`.
+Forgejo Issues on `unbeholden/reviewer`, via `tea`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

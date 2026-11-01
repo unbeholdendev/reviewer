@@ -1,15 +1,15 @@
 # Issue tracker: Forgejo
 
-Issues and specs live in Forgejo Issues on `unbeholden/reviewer`. Use the Forgejo MCP tools (`mcp__forgejo__*`), owner `unbeholden`, repo `reviewer`. No CLI is installed.
+Issues and specs live in Forgejo Issues on `unbeholden/reviewer`. Use `tea` from inside the repo, and `tea api <path>` for what it lacks.
 
 ## Conventions
 
-- **Create**: `create_issue` (title, body).
-- **Read**: `get_issue_by_index`, then `list_issue_comments`.
-- **List**: `list_repo_issues` with state and label filters.
-- **Comment**: `create_issue_comment`.
-- **Labels**: `add_issue_labels` / `remove_issue_labels` take numeric label IDs, not names. Get IDs from `list_repo_labels` with `include_org_labels: false` (the token lacks `read:organization`). Create missing ones with `create_repo_label`.
-- **Close**: `create_issue_comment`, then `issue_state_change` to closed.
+- **Create**: `tea issues create --title <title> --description-file <file>`.
+- **Read**: `tea issues <index>`, then `tea api repos/unbeholden/reviewer/issues/<index>/comments`.
+- **List**: `tea issues list --state <state> --labels <names>`.
+- **Comment**: `tea comment <index> <body>`.
+- **Labels**: `tea issues edit <index> --add-labels <names>` / `--remove-labels <names>`. List with `tea labels list`. Create missing ones with `tea labels create --name <name> --color <hex>`.
+- **Close**: `tea comment`, then `tea issues close <index>`.
 
 ## Pull requests as a triage surface
 
@@ -17,17 +17,17 @@ Issues and specs live in Forgejo Issues on `unbeholden/reviewer`. Use the Forgej
 
 ## When a skill says "publish to the issue tracker"
 
-Create a Forgejo issue with `create_issue`.
+Create a Forgejo issue with `tea issues create`.
 
 ## When a skill says "fetch the relevant ticket"
 
-`get_issue_by_index` plus `list_issue_comments`.
+`tea issues <index>` plus `tea api` on its `comments`.
 
 ## Wayfinding operations
 
 - **Map**: one issue labelled `wayfinder:map`, holding Notes / Decisions-so-far / Fog.
 - **Child ticket**: `Part of #<map>` at the top of the body, and listed in a task list in the map body. Labels `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`).
-- **Blocking**: `add_issue_dependency` (native Forgejo dependencies). Check with `list_issue_dependencies`. Unblocked when every blocker is closed.
+- **Blocking**: native Forgejo dependencies, through `tea api` on `repos/unbeholden/reviewer/issues/<index>/dependencies`: `GET` to check, `POST` to add. Unblocked when every blocker is closed.
 - **Frontier**: the map's open children with no open blocker and no assignee, first in map order.
-- **Claim**: assign to yourself with `update_issue`, as the first write.
+- **Claim**: assign to yourself with `tea issues edit <index> --add-assignees <username>`, as the first write.
 - **Resolve**: comment the answer, close, then add a gist and link to the map's Decisions-so-far.
