@@ -37,7 +37,7 @@ Sessions and settings stay in memory. Subscription credentials are stored outsid
    | `PI_API_KEY` | optional API key; if set, saved credentials are not read |
    | `CONCURRENCY` | reviews at once, default 2 |
 
-4. Run `./deploy.sh` in a terminal. It pulls the image, checks authentication, asks you to sign in if needed, then starts the bot on port 3000.
+4. Run `./deploy.sh` in a terminal from your clone of this repo. It builds the image, checks authentication, asks you to sign in if needed, then starts the bot on port 3000.
 5. Give the bot user access to each repository, and add a webhook to it (or to the org):
    - URL: `http://<host>:3000/webhook`
    - Content type: `application/json`
@@ -46,7 +46,16 @@ Sessions and settings stay in memory. Subscription credentials are stored outsid
 
 ## Deployment and subscription login
 
-Run `./deploy.sh` on the deployment host. Docker Compose is the only host dependency; Pi’s SDK handles login inside a one-off container.
+Run `./deploy.sh` from a clone of this repo on the deployment host. Git and Docker Compose are the only host dependencies; Pi’s SDK handles login inside a one-off container. To update, run `git pull`, then `./deploy.sh` again.
+
+To pull a prebuilt image instead of building, add an untracked `compose.override.yml` (needs Docker Compose 2.24 or later):
+
+```yaml
+services:
+  reviewer:
+    image: registry.example.com/you/reviewer:latest
+    build: !reset null
+```
 
 - A usable saved subscription login is reused without prompting. Expired tokens are refreshed and saved.
 - If the login is missing or cannot be refreshed, the command prints an OpenAI sign-in URL. Open it in your browser and sign in with your subscribed account.

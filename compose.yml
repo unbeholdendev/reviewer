@@ -1,6 +1,6 @@
 services:
   reviewer:
-    image: git.unbeholden.dev/unbeholden/reviewer:latest
+    build: .
     env_file: .env
     volumes:
       - ./credentials:/app/credentials

@@ -104,14 +104,14 @@ test("an explicit API key skips subscription setup and does not create credentia
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test("deployment pulls, checks login, then starts; failures never start the service", async () => {
+test("deployment pulls or builds, checks login, then starts; failures never start the service", async () => {
   const dir = await mkdtemp(join(tmpdir(), "reviewer-deploy-test-"));
   try {
     await Bun.write(join(dir, "deploy.sh"), await Bun.file(deployPath).text());
     await Bun.write(join(dir, "docker"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nif [ "$*" = "$FAIL_COMMAND" ]; then exit 17; fi\n');
     await chmod(join(dir, "docker"), 0o755);
-    const calls = ["compose pull reviewer", "compose run --rm reviewer bun src/login.ts", "compose up -d"];
-    for (const fail of ["", calls[0]!, calls[1]!]) {
+    const calls = ["compose pull --ignore-buildable reviewer", "compose build reviewer", "compose run --rm reviewer bun src/login.ts", "compose up -d"];
+    for (const fail of ["", calls[0]!, calls[1]!, calls[2]!]) {
       await Bun.write(join(dir, "calls"), "");
       const proc = Bun.spawn(["sh", join(dir, "deploy.sh")], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CALLS: join(dir, "calls"), FAIL_COMMAND: fail } });
       expect(await proc.exited).toBe(fail ? 17 : 0);

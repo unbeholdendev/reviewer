@@ -3,7 +3,7 @@
   "number": 27,
   "pull_request": {
     "id": 988,
-    "url": "https://git.unbeholden.dev/api/v1/repos/unbeholden/reviewer/pulls/27",
+    "url": "https://forgejo.example.com/api/v1/repos/unbeholden/reviewer/pulls/27",
     "number": 27,
     "user": { "id": 3, "login": "agent" },
     "title": "Signed webhook endpoint",
@@ -11,7 +11,7 @@
     "created_at": "2026-09-25T08:00:00Z",
     "labels": [],
     "state": "open",
-    "html_url": "https://git.unbeholden.dev/unbeholden/reviewer/pulls/27",
+    "html_url": "https://forgejo.example.com/unbeholden/reviewer/pulls/27",
     "base": {
       "label": "main",
       "ref": "main",
@@ -34,8 +34,8 @@
     "name": "reviewer",
     "full_name": "unbeholden/reviewer",
     "private": true,
-    "html_url": "https://git.unbeholden.dev/unbeholden/reviewer",
-    "clone_url": "https://git.unbeholden.dev/unbeholden/reviewer.git",
+    "html_url": "https://forgejo.example.com/unbeholden/reviewer",
+    "clone_url": "https://forgejo.example.com/unbeholden/reviewer.git",
     "default_branch": "main"
   },
   "sender": { "id": 3, "login": "agent" }
