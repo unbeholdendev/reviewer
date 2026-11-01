@@ -2,6 +2,8 @@
 
 A code review bot for Forgejo. It reviews pull requests with Pi and answers questions in the comments.
 
+This is a mirror of my self-hosted repo.
+
 ## What it does
 
 - Reviews a PR when it is opened, reopened, or taken out of draft (a title that drops its `WIP:` or `[WIP]` prefix). Posts a review with a recommendation, a summary and inline comments.
