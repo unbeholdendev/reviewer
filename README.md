@@ -113,8 +113,16 @@ The cases in `eval/cases.ts` define these outcomes:
 
 The runner prints each expected outcome, the full actual review, scoring failures and a pass count. Any failed case or error exits nonzero. Bug findings must have blocking severity, the expected file and line region, and text matching every trigger-evidence regex listed in `eval/cases.ts`. Extra findings fail, including on the clean control. These deterministic checks use no LLM judge. Regexes can reject a valid paraphrase or accept a misleading explanation that contains the expected words; read the printed findings before drawing conclusions. Five small cases do not establish general review quality.
 
-Fixture and scoring checks run offline as part of `bun test`, or on their own:
+To review a real PR from a local clone and save the result as JSON:
 
 ```sh
-bun test eval/review.test.ts
+bun eval/pr.ts <clone> <base> <head> <output.json> [description-file]
+```
+
+The clone must already hold both commits. The review is never partial, whatever the PR's size, and nothing scores it: read the saved findings.
+
+Fixture, scoring and checkout checks run offline as part of `bun test`, or on their own:
+
+```sh
+bun test eval/
 ```
