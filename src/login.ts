@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { PI_API_KEY, PI_AUTH_FILE, PI_MODEL } from "./env";
+import { PI_API_KEY, PI_AUTH_FILE, PI_PROVIDER, piModel } from "./env";
 
 async function main() {
   if (PI_API_KEY) {
@@ -11,17 +11,15 @@ async function main() {
     return;
   }
   const runtime = await ModelRuntime.create({ authPath: PI_AUTH_FILE, modelsPath: null, refreshOnCreate: false });
-  const slash = PI_MODEL.indexOf("/");
-  const provider = PI_MODEL.slice(0, slash);
-  if (!runtime.getModel(provider, PI_MODEL.slice(slash + 1))) throw new Error(`Unknown Pi model: ${PI_MODEL}`);
-  if ((await runtime.checkAuth(provider))?.type === "oauth") {
+  piModel(runtime);
+  if ((await runtime.checkAuth(PI_PROVIDER))?.type === "oauth") {
     try {
-      if (await runtime.getAuth(provider, { signal: AbortSignal.timeout(60_000) })) {
-        console.log(`Saved ${provider} login is ready.`);
+      if (await runtime.getAuth(PI_PROVIDER, { signal: AbortSignal.timeout(60_000) })) {
+        console.log(`Saved ${PI_PROVIDER} login is ready.`);
         return;
       }
     } catch {
-      console.log(`Saved ${provider} login could not be refreshed; sign in again.`);
+      console.log(`Saved ${PI_PROVIDER} login could not be refreshed; sign in again.`);
     }
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -42,7 +40,7 @@ async function main() {
   process.once("SIGINT", cancel);
   try {
     await runtime.login(
-      provider,
+      PI_PROVIDER,
       "oauth",
       {
         signal: controller.signal,
@@ -60,7 +58,7 @@ async function main() {
       },
       { getDeviceId: () => deviceId },
     );
-    console.log(`Saved ${provider} subscription login.`);
+    console.log(`Saved ${PI_PROVIDER} subscription login.`);
   } finally {
     process.off("SIGINT", cancel);
     terminal.off("close", cancel);

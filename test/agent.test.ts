@@ -179,3 +179,49 @@ test("an already cancelled review never calls the provider", async () => {
   await expect(agent.review(checkout, false, [], [], AbortSignal.abort())).rejects.toThrow();
   expect(faux.getPendingResponseCount()).toBe(1);
 });
+
+test("review and reply prompts are built exactly", async () => {
+  const instructions = (name: string) => Bun.file(new URL(`../prompts/${name}.md`, import.meta.url)).text();
+  const [reviewInstructions, replyInstructions] = await Promise.all([instructions("review"), instructions("reply")]);
+  const conversation = [{ user: "alice", body: "author context", at: "now", path: "a.ts", line: 3 }];
+  const open = {
+    id: 7,
+    review: 1,
+    user: "bot",
+    path: "a.ts",
+    line: 3,
+    side: "RIGHT" as const,
+    body: "Open.",
+    resolved: false,
+    at: "now",
+  };
+  const note = '- {"user":"alice","path":"a.ts","line":3,"body":"author context"}';
+  const prompts: string[] = [];
+  const capture = (body: string) => (context: { messages: { role: string; content: unknown }[] }) => {
+    const user = context.messages.find((m) => m.role === "user");
+    const content = user?.content;
+    prompts.push(
+      typeof content === "string" ? content : (content as { text: string }[]).map((part) => part.text).join(""),
+    );
+    return fauxAssistantMessage(body);
+  };
+  const review = { summary: "Fine.", recommendation: "looks-good", comments: [], addressed: [] };
+  faux.setResponses([
+    capture(JSON.stringify(review)),
+    capture(JSON.stringify(review)),
+    capture(JSON.stringify({ body: "Because." })),
+    capture(JSON.stringify({ body: "Because." })),
+  ]);
+  const signal = new AbortController().signal;
+  await agent.review(checkout, true, [open], conversation, signal);
+  await agent.review({ ...checkout, rules: "", incremental: false }, false, [], [], signal);
+  await agent.reply(checkout, "Why?", [open], conversation, "bot");
+  await agent.reply({ ...checkout, rules: "" }, "Why?", undefined, [], "bot");
+  const expected = [
+    `${reviewInstructions}\n## Repository rules\n\nbase rules\n\n## Conversation\n\n${note}\n\n## Your open comments\n\n- {"id":7,"path":"a.ts","line":3,"side":"RIGHT","body":"Open."}\n\n## Commits\n\nthe commits\n\n## Diff (new commits only, large PR)\n\nthe diff`,
+    `${reviewInstructions}\n## Repository rules\n\nNone.\n\n## Conversation\n\n\n\n## Your open comments\n\nNone.\n\n## Commits\n\nthe commits\n\n## Diff\n\nthe diff`,
+    `${replyInstructions}\nYou are @bot. Comments by \`bot\` are yours.\n\n## Repository rules\n\nbase rules\n\n## Conversation\n\n${note}\n\n## Commits\n\nthe commits\n\n## Diff\n\nthe diff\n\n## Thread on \`a.ts:3\`\n\n- {"user":"bot","body":"Open."}\n\n## Comment\n\nWhy?`,
+    `${replyInstructions}\nYou are @bot. Comments by \`bot\` are yours.\n\n## Repository rules\n\nNone.\n\n## Conversation\n\n\n\n## Commits\n\nthe commits\n\n## Diff\n\nthe diff\n\n## Comment\n\nWhy?`,
+  ];
+  expect(prompts.map((p) => p.slice(0, p.lastIndexOf("\n\nReturn only a JSON object")))).toEqual(expected);
+});

@@ -1,5 +1,15 @@
 import { anchorable, changedLines, skipped, withoutSkipped } from "./diff";
-import type { Adapters, BotComment, Comment, Forgejo, Note, PR, Pull, Thread } from "./types";
+import {
+  type Adapters,
+  type BotComment,
+  type Comment,
+  type Forgejo,
+  type Note,
+  type PR,
+  type Pull,
+  position,
+  type Thread,
+} from "./types";
 
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
@@ -87,7 +97,7 @@ async function run(
       body,
       comments: inline.map((c) => ({
         path: c.path,
-        [c.side === "RIGHT" ? "new_position" : "old_position"]: c.line,
+        ...position(c.side, c.line),
         body: label(c),
       })),
     });

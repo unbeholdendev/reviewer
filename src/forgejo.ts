@@ -1,14 +1,25 @@
 import { z } from "zod";
 import { FORGEJO_TOKEN, FORGEJO_URL } from "./env";
-import {
-  type Forgejo,
-  ForgejoCreated,
-  ForgejoIssueComment,
-  ForgejoPull,
-  ForgejoReview,
-  ForgejoReviewComment,
-  ForgejoUser,
-} from "./types";
+import { type Forgejo, ForgejoPull, ForgejoUser, position, toPull } from "./types";
+
+const ForgejoReview = z.object({
+  id: z.number(),
+  user: ForgejoUser.nullable(),
+  body: z.string(),
+  submitted_at: z.string(),
+});
+const ForgejoIssueComment = z.object({ user: ForgejoUser.nullable(), body: z.string(), created_at: z.string() });
+const ForgejoReviewComment = z.object({
+  id: z.number(),
+  user: ForgejoUser.nullable(),
+  path: z.string(),
+  position: z.number(),
+  original_position: z.number(),
+  body: z.string(),
+  resolver: ForgejoUser.nullable(),
+  created_at: z.string(),
+});
+const ForgejoCreated = z.object({ id: z.number() });
 
 const headers = { Authorization: `token ${FORGEJO_TOKEN}`, "Content-Type": "application/json" };
 
@@ -34,15 +45,7 @@ export const forgejo: Forgejo = {
     await api(`/repos/${owner}/${repo}/issues/comments/${comment}/reactions`, z.unknown(), { content: "eyes" });
   },
   async pull({ owner, repo, number }) {
-    const { base, head, user, title, body, created_at } = await api(
-      `/repos/${owner}/${repo}/pulls/${number}`,
-      ForgejoPull,
-    );
-    return {
-      base: base.sha,
-      head: head.sha,
-      description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at },
-    };
+    return toPull(await api(`/repos/${owner}/${repo}/pulls/${number}`, ForgejoPull));
   },
   async comment({ owner, repo, number }, body) {
     await api(`/repos/${owner}/${repo}/issues/${number}/comments`, ForgejoCreated, { body });
@@ -87,7 +90,7 @@ export const forgejo: Forgejo = {
     await api(`/repos/${owner}/${repo}/pulls/${number}/reviews/${review}/comments`, ForgejoCreated, {
       path,
       body,
-      [side === "RIGHT" ? "new_position" : "old_position"]: line,
+      ...position(side, line),
     });
   },
   async issueComments({ owner, repo, number }) {

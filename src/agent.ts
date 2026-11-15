@@ -15,7 +15,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import { PI_API_KEY, PI_AUTH_FILE, PI_MODEL } from "./env";
+import { PI_API_KEY, PI_AUTH_FILE, PI_MODEL, PI_PROVIDER, piModel } from "./env";
 import { type Agent, type Note, Reply, Review } from "./types";
 
 const prompt = (name: string) => Bun.file(new URL(`../prompts/${name}.md`, import.meta.url)).text();
@@ -27,14 +27,11 @@ const modelRuntime = await ModelRuntime.create({
   modelsPath: null,
   refreshOnCreate: false,
 });
-const slash = PI_MODEL.indexOf("/");
-const provider = PI_MODEL.slice(0, slash);
-if (PI_API_KEY) await modelRuntime.setRuntimeApiKey(provider, PI_API_KEY);
-const model = modelRuntime.getModel(provider, PI_MODEL.slice(slash + 1));
-if (!model) throw new Error(`Unknown Pi model: ${PI_MODEL}`);
-if (!PI_API_KEY && (await modelRuntime.checkAuth(provider))?.type !== "oauth") {
+if (PI_API_KEY) await modelRuntime.setRuntimeApiKey(PI_PROVIDER, PI_API_KEY);
+const model = piModel(modelRuntime);
+if (!PI_API_KEY && (await modelRuntime.checkAuth(PI_PROVIDER))?.type !== "oauth") {
   throw new Error(
-    `No Pi subscription login for ${provider} in ${PI_AUTH_FILE}. See README.md for subscription setup, or set PI_API_KEY.`,
+    `No Pi subscription login for ${PI_PROVIDER} in ${PI_AUTH_FILE}. See README.md for subscription setup, or set PI_API_KEY.`,
   );
 }
 
@@ -126,26 +123,43 @@ async function run<T>(
 const notes = (conversation: Note[]) =>
   conversation.map(({ user, path, line, body }) => `- ${JSON.stringify({ user, path, line, body })}`).join("\n");
 
+const sections = (...parts: string[][]) => parts.map(([heading, body]) => `## ${heading}\n\n${body}`).join("\n\n");
+
 export const agent: Agent = {
   review({ dir, diff, log, rules, incremental }, large, open, conversation, signal) {
     const comments = open
       .map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`)
       .join("\n");
     const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
-    return run(
-      dir,
-      `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`,
-      Review,
-      signal,
+    const context = sections(
+      ["Repository rules", rules || "None."],
+      ["Conversation", notes(conversation)],
+      ["Your open comments", comments || "None."],
+      ["Commits", log],
+      [`Diff${heading && ` (${heading})`}`, diff],
     );
+    return run(dir, `${reviewInstructions}\n${context}`, Review, signal);
   },
   reply({ dir, diff, log, rules }, comment, thread, conversation, login) {
     const history = thread
-      ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n`
-      : "";
+      ? [
+          [
+            `Thread on \`${thread[0].path}:${thread[0].line}\``,
+            thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n"),
+          ],
+        ]
+      : [];
+    const context = sections(
+      ["Repository rules", rules || "None."],
+      ["Conversation", notes(conversation)],
+      ["Commits", log],
+      ["Diff", diff],
+      ...history,
+      ["Comment", comment],
+    );
     return run(
       dir,
-      `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`,
+      `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n${context}`,
       Reply,
     );
   },

@@ -20,24 +20,6 @@ export const Reply = z.object({ body: z.string() });
 export type Reply = z.infer<typeof Reply>;
 
 export const ForgejoUser = z.object({ login: z.string() });
-export const ForgejoReview = z.object({
-  id: z.number(),
-  user: ForgejoUser.nullable(),
-  body: z.string(),
-  submitted_at: z.string(),
-});
-export const ForgejoIssueComment = z.object({ user: ForgejoUser.nullable(), body: z.string(), created_at: z.string() });
-export const ForgejoReviewComment = z.object({
-  id: z.number(),
-  user: ForgejoUser.nullable(),
-  path: z.string(),
-  position: z.number(),
-  original_position: z.number(),
-  body: z.string(),
-  resolver: ForgejoUser.nullable(),
-  created_at: z.string(),
-});
-export const ForgejoCreated = z.object({ id: z.number() });
 export const ForgejoPull = z.object({
   base: z.object({ sha: z.string() }),
   head: z.object({ sha: z.string() }),
@@ -46,11 +28,18 @@ export const ForgejoPull = z.object({
   body: z.string(),
   created_at: z.string(),
 });
+export const toPull = ({ base, head, user, title, body, created_at }: z.infer<typeof ForgejoPull>): Pull => ({
+  base: base.sha,
+  head: head.sha,
+  description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at },
+});
 
 export type PR = { owner: string; repo: string; number: number };
 export type Pull = { base: string; head: string; description: Note };
 export type Checkout = { dir: string; diff: string; log: string; rules: string; incremental?: boolean };
 export type InlineComment = { path: string; body: string; new_position?: number; old_position?: number };
+export const position = (side: "LEFT" | "RIGHT", line: number): Pick<InlineComment, "new_position" | "old_position"> =>
+  side === "RIGHT" ? { new_position: line } : { old_position: line };
 export type BotComment = {
   id: number;
   review: number;

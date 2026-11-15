@@ -1,3 +1,4 @@
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 
 export const { FORGEJO_URL, FORGEJO_TOKEN, WEBHOOK_SECRET, PI_MODEL, PI_API_KEY, PI_AUTH_FILE, CONCURRENCY } = z
@@ -14,3 +15,12 @@ export const { FORGEJO_URL, FORGEJO_TOKEN, WEBHOOK_SECRET, PI_MODEL, PI_API_KEY,
     CONCURRENCY: z.coerce.number().int().positive().default(2),
   })
   .parse(process.env);
+
+const slash = PI_MODEL.indexOf("/");
+export const PI_PROVIDER = PI_MODEL.slice(0, slash);
+
+export function piModel(runtime: ModelRuntime) {
+  const model = runtime.getModel(PI_PROVIDER, PI_MODEL.slice(slash + 1));
+  if (!model) throw new Error(`Unknown Pi model: ${PI_MODEL}`);
+  return model;
+}
