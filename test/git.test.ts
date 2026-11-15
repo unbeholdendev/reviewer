@@ -34,7 +34,9 @@ test("repository rules use AGENTS.md and REVIEW.md from the PR base, not its hea
       finally { await git.remove(checkout); }
     `;
     const proc = Bun.spawn([process.execPath, "-e", script], {
-      env: { ...process.env, FORGEJO_URL: `file://${dir}` }, stdout: "pipe", stderr: "pipe",
+      env: { ...process.env, FORGEJO_URL: `file://${dir}` },
+      stdout: "pipe",
+      stderr: "pipe",
     });
     const [out, err, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
     expect({ code, err }).toEqual({ code: 0, err: "" });

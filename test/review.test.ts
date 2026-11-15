@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
-import { send, setup } from "./harness";
 import opened from "./fixtures/pull_request.opened.json";
+import { send, setup } from "./harness";
 
 const review = { summary: "Adds a signed webhook route.", recommendation: "nits", comments: [], addressed: [] };
 const pr = { owner: "unbeholden", repo: "reviewer", number: 27 };
@@ -15,7 +15,10 @@ test("an opened PR gets a COMMENT review with the summary and recommendation", a
     {
       adapter: "forgejo",
       method: "createReview",
-      args: [pr, { event: "COMMENT", body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`, comments: [] }],
+      args: [
+        pr,
+        { event: "COMMENT", body: `**Recommendation:** nits\n\nAdds a signed webhook route.${marker}`, comments: [] },
+      ],
     },
   ]);
 });
@@ -41,7 +44,17 @@ test("the review runs in a checkout of the PR head, removed afterwards", async (
   await app.idle();
   expect(calls.filter((c) => c.adapter !== "forgejo")).toEqual([
     { adapter: "git", method: "checkout", args: [pr, opened.pull_request.base.sha, opened.pull_request.head.sha] },
-    { adapter: "agent", method: "review", args: [checkout, false, [], [{ user: "agent", body: "Signed webhook endpoint\n\nCloses #3", at: "2026-09-25T08:00:00Z" }], expect.any(AbortSignal)] },
+    {
+      adapter: "agent",
+      method: "review",
+      args: [
+        checkout,
+        false,
+        [],
+        [{ user: "agent", body: "Signed webhook endpoint\n\nCloses #3", at: "2026-09-25T08:00:00Z" }],
+        expect.any(AbortSignal),
+      ],
+    },
     { adapter: "git", method: "remove", args: [checkout] },
   ]);
 });
@@ -53,7 +66,11 @@ test("the checkout is removed when the review fails", async () => {
   });
   await send(app, "pull_request", opened);
   await app.idle();
-  expect(calls.filter((c) => c.adapter === "git").at(-1)).toEqual({ adapter: "git", method: "remove", args: [checkout] });
+  expect(calls.filter((c) => c.adapter === "git").at(-1)).toEqual({
+    adapter: "git",
+    method: "remove",
+    args: [checkout],
+  });
 });
 
 test("comments on diff lines go inline, others move into the summary", async () => {
@@ -79,10 +96,11 @@ test("comments on diff lines go inline, others move into the summary", async () 
   await app.idle();
   expect(calls.find((c) => c.method === "createReview")?.args[1]).toEqual({
     event: "COMMENT",
-    body: [
-      "**Recommendation:** nits\n\nAdds a signed webhook route.",
-      "**Outside the diff:**\n\n- `src/a.ts:40` **nit:** Far away.\n- `src/b.ts:1` **blocking:** Not in diff.",
-    ].join("\n\n") + marker,
+    body:
+      [
+        "**Recommendation:** nits\n\nAdds a signed webhook route.",
+        "**Outside the diff:**\n\n- `src/a.ts:40` **nit:** Far away.\n- `src/b.ts:1` **blocking:** Not in diff.",
+      ].join("\n\n") + marker,
     comments: [
       { path: "src/a.ts", new_position: 11, body: "**blocking:** Null here." },
       { path: "src/a.ts", old_position: 11, body: "**nit:** Was fine." },
@@ -149,13 +167,24 @@ test("a PR labelled no-review runs no job", async () => {
   const pull_request = { ...opened.pull_request, labels: [{ name: "bug" }, { name: "no-review" }] };
   await send(app, "pull_request", { ...opened, pull_request });
   await send(app, "pull_request", { ...opened, action: "reopened", pull_request });
-  await send(app, "pull_request", { ...opened, action: "edited", changes: { title: { from: "WIP: x" } }, pull_request });
+  await send(app, "pull_request", {
+    ...opened,
+    action: "edited",
+    changes: { title: { from: "WIP: x" } },
+    pull_request,
+  });
   await app.idle();
   expect(calls).toEqual([]);
 });
 
 const lines = (path: string, n: number) =>
-  [`diff --git a/${path} b/${path}`, `--- a/${path}`, `+++ b/${path}`, `@@ -1,0 +1,${n} @@`, ...Array(n).fill("+x")].join("\n");
+  [
+    `diff --git a/${path} b/${path}`,
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -1,0 +1,${n} @@`,
+    ...Array(n).fill("+x"),
+  ].join("\n");
 
 test("a PR over 3000 changed lines gets a partial review with a note", async () => {
   const diff = lines("src/a.ts", 3001);
@@ -238,8 +267,17 @@ test("a push with no marker gets a full review", async () => {
   expect(calls.find((c) => c.adapter === "git")?.args).toEqual([pr, base.sha, head.sha, undefined]);
 });
 
-const botComment = (id: number, body: string, resolved = false, user = "reviewer-bot") =>
-  ({ id, review: 1, user, path: "src/a.ts", line: id, side: "RIGHT", body, resolved, at: "" });
+const botComment = (id: number, body: string, resolved = false, user = "reviewer-bot") => ({
+  id,
+  review: 1,
+  user,
+  path: "src/a.ts",
+  line: id,
+  side: "RIGHT",
+  body,
+  resolved,
+  at: "",
+});
 
 test("an incremental review sees the bot's open thread starters and replies once to each one addressed", async () => {
   const open = botComment(10, "**nit:** Rename this.");
@@ -292,7 +330,14 @@ test("a full review sees no open comments", async () => {
 });
 
 test("an incremental review moves comments on removed lines into the summary", async () => {
-  const diff = ["diff --git a/src/a.ts b/src/a.ts", "--- a/src/a.ts", "+++ b/src/a.ts", "@@ -1 +1 @@", "-old", "+new"].join("\n");
+  const diff = [
+    "diff --git a/src/a.ts b/src/a.ts",
+    "--- a/src/a.ts",
+    "+++ b/src/a.ts",
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+  ].join("\n");
   const comments = [
     { path: "src/a.ts", line: 1, side: "LEFT", body: "Was fine.", severity: "nit" },
     { path: "src/a.ts", line: 1, side: "RIGHT", body: "New.", severity: "nit" },
@@ -317,7 +362,11 @@ test("a failed review posts one failure comment and logs the error to stdout", a
   await send(app, "pull_request", opened);
   await app.idle();
   expect(calls.filter((c) => c.method === "comment")).toEqual([
-    { adapter: "forgejo", method: "comment", args: [pr, "The review failed. Retry with `@reviewer-bot review again`."] },
+    {
+      adapter: "forgejo",
+      method: "comment",
+      args: [pr, "The review failed. Retry with `@reviewer-bot review again`."],
+    },
   ]);
   expect(log).toHaveBeenCalledWith("webhook job failed:", error);
   log.mockRestore();
@@ -335,7 +384,10 @@ test("a failed checkout also posts a failure comment", async () => {
 test("a failed failure comment still logs the original error", async () => {
   const log = spyOn(console, "log").mockImplementation(() => {});
   const error = new Error("git failed");
-  const { app } = setup({ "git.checkout": () => Promise.reject(error), "forgejo.comment": () => Promise.reject(new Error("forgejo down")) });
+  const { app } = setup({
+    "git.checkout": () => Promise.reject(error),
+    "forgejo.comment": () => Promise.reject(new Error("forgejo down")),
+  });
   await send(app, "pull_request", opened);
   await app.idle();
   expect(log).toHaveBeenCalledWith("webhook job failed:", error);

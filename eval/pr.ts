@@ -15,17 +15,32 @@ async function git(clone: string, ...args: string[]) {
   return out;
 }
 
-export async function reviewPull(agent: Pick<Agent, "review">, { clone, base, head, description }: PullCase, signal: AbortSignal) {
+export async function reviewPull(
+  agent: Pick<Agent, "review">,
+  { clone, base, head, description }: PullCase,
+  signal: AbortSignal,
+) {
   const diff = withoutSkipped(await git(clone, "diff", `${base}...${head}`));
   const log = await git(clone, "log", `${base}..${head}`);
   const rules = await Promise.all(
-    ["REVIEW.md", "AGENTS.md"].map((f) => git(clone, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
+    ["REVIEW.md", "AGENTS.md"].map((f) =>
+      git(clone, "show", `${base}:${f}`).then(
+        (t) => `### ${f}\n\n${t}`,
+        () => "",
+      ),
+    ),
   );
   const dir = join(tmpdir(), "reviewer-eval", randomUUID());
   await git(clone, "-c", "core.hooksPath=/dev/null", "worktree", "add", "--detach", dir, head);
   try {
     const conversation = description ? [{ user: "author", body: description, at: "" }] : [];
-    const review = await agent.review({ dir, diff, log, rules: rules.filter(Boolean).join("\n") }, false, [], conversation, signal);
+    const review = await agent.review(
+      { dir, diff, log, rules: rules.filter(Boolean).join("\n") },
+      false,
+      [],
+      conversation,
+      signal,
+    );
     return { review, changed: changedLines(diff) };
   } finally {
     await git(clone, "worktree", "remove", "--force", dir);
@@ -34,7 +49,8 @@ export async function reviewPull(agent: Pick<Agent, "review">, { clone, base, he
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args[0] === "--help") return console.log(`${usage}
+  if (args[0] === "--help")
+    return console.log(`${usage}
 
 Reviews base...head of a local clone with the real model, using PI_MODEL and PI_AUTH_FILE or PI_API_KEY.
 Never partial. Saves the review as JSON. No Forgejo or Git network calls.`);
@@ -52,7 +68,9 @@ Never partial. Saves the review as JSON. No Forgejo or Git network calls.`);
   const start = Date.now();
   const { review, changed } = await reviewPull(agent, { clone, base, head, description }, controller.signal);
   await Bun.write(output, `${JSON.stringify(review, null, 2)}\n`);
-  console.log(`${review.recommendation}, ${review.comments.length} comments, ${changed} changed lines, ${Date.now() - start}ms: ${output}`);
+  console.log(
+    `${review.recommendation}, ${review.comments.length} comments, ${changed} changed lines, ${Date.now() - start}ms: ${output}`,
+  );
 }
 
 if (import.meta.main) {

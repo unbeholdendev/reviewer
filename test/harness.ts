@@ -1,3 +1,4 @@
+// biome-ignore-all assist/source/organizeImports: test-env must load before src/env parses process.env
 // must stay first: sets env before src/env.ts parses it on import
 import { secret } from "./test-env";
 import { createHmac } from "node:crypto";
@@ -6,9 +7,14 @@ import { createApp } from "../src/app";
 type Call = { adapter: string; method: string; args: unknown[] };
 
 export function setup(overrides: Record<string, unknown> = {}) {
-  const returns: Record<string, unknown> = { "forgejo.reviews": [], "forgejo.comments": [], "forgejo.issueComments": [], ...overrides };
+  const returns: Record<string, unknown> = {
+    "forgejo.reviews": [],
+    "forgejo.comments": [],
+    "forgejo.issueComments": [],
+    ...overrides,
+  };
   const calls: Call[] = [];
-  const fake = (adapter: string, props: Record<string | symbol, unknown> = {}): any =>
+  const fake = <T>(adapter: string, props: Record<string | symbol, unknown> = {}) =>
     new Proxy(props, {
       get: (_, method) => {
         if (method in props) return props[method];
@@ -20,8 +26,12 @@ export function setup(overrides: Record<string, unknown> = {}) {
           return typeof r === "function" ? r(...args) : r;
         };
       },
-    });
-  const app = createApp({ forgejo: fake("forgejo", { login: "reviewer-bot" }), git: fake("git"), agent: fake("agent") });
+    }) as T;
+  const app = createApp({
+    forgejo: fake("forgejo", { login: "reviewer-bot" }),
+    git: fake("git"),
+    agent: fake("agent"),
+  });
   return { app, calls };
 }
 

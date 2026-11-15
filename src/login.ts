@@ -41,19 +41,25 @@ async function main() {
   terminal.once("close", cancel);
   process.once("SIGINT", cancel);
   try {
-    await runtime.login(provider, "oauth", {
-      signal: controller.signal,
-      prompt(request) {
-        if (request.type !== "text" && request.type !== "manual_code") throw new Error("This login requires Pi's interactive CLI.");
-        return terminal.question(`${request.message} `, { signal: request.signal ?? controller.signal });
+    await runtime.login(
+      provider,
+      "oauth",
+      {
+        signal: controller.signal,
+        prompt(request) {
+          if (request.type !== "text" && request.type !== "manual_code")
+            throw new Error("This login requires Pi's interactive CLI.");
+          return terminal.question(`${request.message} `, { signal: request.signal ?? controller.signal });
+        },
+        notify(event) {
+          if ("message" in event) console.log(event.message);
+          if (event.type === "auth_url") console.log(`${event.instructions ?? ""}\n${event.url}`);
+          if (event.type === "device_code") console.log(`Open ${event.verificationUri} and enter ${event.userCode}`);
+          if (event.type === "info") for (const link of event.links ?? []) console.log(link.url);
+        },
       },
-      notify(event) {
-        if ("message" in event) console.log(event.message);
-        if (event.type === "auth_url") console.log(`${event.instructions ?? ""}\n${event.url}`);
-        if (event.type === "device_code") console.log(`Open ${event.verificationUri} and enter ${event.userCode}`);
-        if (event.type === "info") for (const link of event.links ?? []) console.log(link.url);
-      },
-    }, { getDeviceId: () => deviceId });
+      { getDeviceId: () => deviceId },
+    );
     console.log(`Saved ${provider} subscription login.`);
   } finally {
     process.off("SIGINT", cancel);

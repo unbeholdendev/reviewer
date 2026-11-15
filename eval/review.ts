@@ -2,18 +2,35 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Checkout } from "../src/types";
-import { cases, score, type Case } from "./cases";
+import { type Case, cases, score } from "./cases";
 
-export async function withCheckout<T>(testCase: Case, use: (checkout: Checkout, head: string) => Promise<T>): Promise<T> {
+export async function withCheckout<T>(
+  testCase: Case,
+  use: (checkout: Checkout, head: string) => Promise<T>,
+): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "reviewer-eval-"));
   const git = (...args: string[]) => {
-    const result = Bun.spawnSync([
-      "git", "-C", dir, "-c", "user.name=Author", "-c", "user.email=author@example.invalid",
-      "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args,
-    ], {
-      env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
-      stdout: "pipe", stderr: "pipe",
-    });
+    const result = Bun.spawnSync(
+      [
+        "git",
+        "-C",
+        dir,
+        "-c",
+        "user.name=Author",
+        "-c",
+        "user.email=author@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        ...args,
+      ],
+      {
+        env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     if (result.exitCode !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr.toString()}`);
     return result.stdout.toString().trimEnd();
   };
@@ -25,10 +42,16 @@ export async function withCheckout<T>(testCase: Case, use: (checkout: Checkout, 
     for (const [path, text] of Object.entries(testCase.after)) await Bun.write(join(dir, path), text);
     git("add", ".");
     git("commit", "-m", testCase.message);
-    return await use({
-      dir, diff: git("diff", "HEAD^..HEAD"), log: git("log", "-1"), rules: "",
-      incremental: !!testCase.open,
-    }, git("rev-parse", "HEAD"));
+    return await use(
+      {
+        dir,
+        diff: git("diff", "HEAD^..HEAD"),
+        log: git("log", "-1"),
+        rules: "",
+        incremental: !!testCase.open,
+      },
+      git("rev-parse", "HEAD"),
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -62,7 +85,13 @@ Run offline fixture/scoring checks with: bun test eval/review.test.ts`);
       console.log(`\nCASE: ${testCase.name}\nExpected: ${testCase.expected.description}`);
       try {
         const failures = await withCheckout(testCase, async (checkout, head) => {
-          const review = await agent.review(checkout, false, testCase.open ? [testCase.open] : [], [], controller.signal);
+          const review = await agent.review(
+            checkout,
+            false,
+            testCase.open ? [testCase.open] : [],
+            [],
+            controller.signal,
+          );
           console.log(`Actual:\n${JSON.stringify(review, null, 2)}`);
           return score(testCase, review, head);
         });

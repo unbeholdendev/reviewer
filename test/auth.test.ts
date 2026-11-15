@@ -20,7 +20,10 @@ test("subscription credentials refresh once for concurrent reviews and survive a
   const dir = await mkdtemp(join(tmpdir(), "reviewer-auth-test-"));
   try {
     const auth = join(dir, "auth.json");
-    await Bun.write(auth, JSON.stringify({ openai: { type: "oauth", access: "expired", refresh: "old-refresh", expires: 0 } }));
+    await Bun.write(
+      auth,
+      JSON.stringify({ openai: { type: "oauth", access: "expired", refresh: "old-refresh", expires: 0 } }),
+    );
     const script = `
       import { spyOn } from "bun:test";
       import { fauxProvider, fauxAssistantMessage } from "@earendil-works/pi-ai";
@@ -57,8 +60,15 @@ test("subscription credentials refresh once for concurrent reviews and survive a
     for (const refreshes of [1, 0]) {
       const result = await run(dir, script);
       expect({ code: result.code, stderr: result.stderr }).toEqual({ code: 0, stderr: "" });
-      expect(JSON.parse(result.stdout.trim().split("\n").at(-1)!)).toEqual({ refreshes, results: [{ body: "Working." }, { body: "Working." }] });
-      expect((await Bun.file(auth).json()).openai).toMatchObject({ type: "oauth", access: "new-access", refresh: "new-refresh" });
+      expect(JSON.parse(result.stdout.trim().split("\n").at(-1)!)).toEqual({
+        refreshes,
+        results: [{ body: "Working." }, { body: "Working." }],
+      });
+      expect((await Bun.file(auth).json()).openai).toMatchObject({
+        type: "oauth",
+        access: "new-access",
+        refresh: "new-refresh",
+      });
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -73,7 +83,10 @@ test("a missing subscription login gives a setup error without making model requ
     expect(result.stderr).toContain("No Pi subscription login for openai");
     expect(result.stderr).toContain("subscription setup");
     expect((await stat(join(dir, "auth.json"))).mode & 0o777).toBe(0o600);
-    const ambientKey = await run(dir, `process.env.OPENAI_API_KEY = "unintended-api-key"; await import(${JSON.stringify(agentURL)});`);
+    const ambientKey = await run(
+      dir,
+      `process.env.OPENAI_API_KEY = "unintended-api-key"; await import(${JSON.stringify(agentURL)});`,
+    );
     expect(ambientKey.code).not.toBe(0);
     expect(ambientKey.stderr).toContain("No Pi subscription login for openai");
   } finally {

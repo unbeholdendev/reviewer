@@ -42,11 +42,21 @@ export const git: Git = {
       else await run("clone", "--mirror", `${FORGEJO_URL}/${owner}/${repo}.git`, mirror);
       await run("-C", mirror, "worktree", "prune");
       // a force-push can drop since from head's history: fall back to a full review
-      const from = since && (await run("-C", mirror, "merge-base", "--is-ancestor", since, head).then(() => since, () => ""));
+      const from =
+        since &&
+        (await run("-C", mirror, "merge-base", "--is-ancestor", since, head).then(
+          () => since,
+          () => "",
+        ));
       const diff = await run("-C", mirror, "diff", from ? `${from}..${head}` : `${base}...${head}`);
       const log = await run("-C", mirror, "log", `${from || base}..${head}`);
       const rules = await Promise.all(
-        ["REVIEW.md", "AGENTS.md"].map((f) => run("-C", mirror, "show", `${base}:${f}`).then((t) => `### ${f}\n\n${t}`, () => "")),
+        ["REVIEW.md", "AGENTS.md"].map((f) =>
+          run("-C", mirror, "show", `${base}:${f}`).then(
+            (t) => `### ${f}\n\n${t}`,
+            () => "",
+          ),
+        ),
       );
       const dir = join(root, "worktrees", randomUUID());
       await run("-C", mirror, "worktree", "add", "--detach", dir, head);

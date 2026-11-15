@@ -14,5 +14,6 @@ jobs:
           # an exact version skips the GitHub API lookup, which rate-limits the runner
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - run: bunx biome ci .
       - run: bunx tsc
       - run: bun test

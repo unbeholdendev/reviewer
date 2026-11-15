@@ -18,3 +18,7 @@ Main is mirrored to a public GitHub repo with no check before the push, and
 force-pushes cannot reliably remove anything from it. Stage files by name.
 Commits, including messages and trailers, must not hold private hosts, public
 IPs, employer or client names, or private emails.
+
+## Formatting
+
+Run `bun run format` before committing; CI fails on unformatted code.

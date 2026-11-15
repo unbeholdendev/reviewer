@@ -1,3 +1,4 @@
+// biome-ignore-all assist/source/organizeImports: harness must load before src/env parses process.env
 import { expect, test } from "bun:test";
 import { send, setup } from "./harness";
 import { CONCURRENCY } from "../src/env";
@@ -7,7 +8,8 @@ const checkout = { dir: "/wt", diff: "", log: "", rules: "" };
 const review = { summary: "", recommendation: "looks-good", comments: [], addressed: [] };
 
 test("at most CONCURRENCY jobs run at once under a burst of webhooks", async () => {
-  let running = 0, peak = 0;
+  let running = 0,
+    peak = 0;
   const release: (() => void)[] = [];
   const { app, calls } = setup({
     "git.checkout": () => {
@@ -28,7 +30,8 @@ test("at most CONCURRENCY jobs run at once under a burst of webhooks", async () 
 });
 
 test("jobs on one PR never overlap", async () => {
-  let running = 0, peak = 0;
+  let running = 0,
+    peak = 0;
   const { app } = setup({
     "git.checkout": async () => {
       peak = Math.max(peak, ++running);
@@ -44,7 +47,11 @@ test("jobs on one PR never overlap", async () => {
   expect(peak).toBe(1);
 });
 
-const push = (sha: string) => ({ ...opened, action: "synchronized", pull_request: { ...opened.pull_request, head: { sha } } });
+const push = (sha: string) => ({
+  ...opened,
+  action: "synchronized",
+  pull_request: { ...opened.pull_request, head: { sha } },
+});
 
 test("a push aborts every review of that PR, not only the last one queued", async () => {
   let release = () => {};
@@ -61,7 +68,10 @@ test("a push aborts every review of that PR, not only the last one queued", asyn
   while (calls.filter((c) => c.method === "review").length < 2) await Bun.sleep(1);
   release();
   await app.idle();
-  expect(calls.filter((c) => c.method === "checkout").map((c) => c.args[2])).toEqual([opened.pull_request.head.sha, "ccc"]);
+  expect(calls.filter((c) => c.method === "checkout").map((c) => c.args[2])).toEqual([
+    opened.pull_request.head.sha,
+    "ccc",
+  ]);
   expect(calls.filter((c) => c.method === "createReview")).toHaveLength(1);
 });
 
@@ -70,7 +80,9 @@ test("a review killed by a push posts no failure comment", async () => {
     "git.checkout": checkout,
     "forgejo.reviews": [],
     "agent.review": (_: unknown, __: boolean, ___: unknown, ____: unknown, signal: AbortSignal) =>
-      calls.filter((c) => c.method === "review").length > 1 ? review : new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("killed")))),
+      calls.filter((c) => c.method === "review").length > 1
+        ? review
+        : new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("killed")))),
   });
   await send(app, "pull_request", opened);
   while (!calls.some((c) => c.method === "review")) await Bun.sleep(1);

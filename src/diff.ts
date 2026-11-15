@@ -20,7 +20,10 @@ export function changedLines(diff: string) {
 // Forgejo only anchors comments on lines shown in a hunk
 export function anchorable(diff: string) {
   const lines = new Set<string>();
-  let path = "", left = 0, right = 0, inHunk = false;
+  let path = "",
+    left = 0,
+    right = 0,
+    inHunk = false;
   for (const l of diff.split("\n")) {
     const hunk = l.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/);
     if (hunk) [left, right, inHunk] = [Number(hunk[1]), Number(hunk[2]), true];

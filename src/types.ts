@@ -20,7 +20,12 @@ export const Reply = z.object({ body: z.string() });
 export type Reply = z.infer<typeof Reply>;
 
 export const ForgejoUser = z.object({ login: z.string() });
-export const ForgejoReview = z.object({ id: z.number(), user: ForgejoUser.nullable(), body: z.string(), submitted_at: z.string() });
+export const ForgejoReview = z.object({
+  id: z.number(),
+  user: ForgejoUser.nullable(),
+  body: z.string(),
+  submitted_at: z.string(),
+});
 export const ForgejoIssueComment = z.object({ user: ForgejoUser.nullable(), body: z.string(), created_at: z.string() });
 export const ForgejoReviewComment = z.object({
   id: z.number(),
@@ -46,7 +51,17 @@ export type PR = { owner: string; repo: string; number: number };
 export type Pull = { base: string; head: string; description: Note };
 export type Checkout = { dir: string; diff: string; log: string; rules: string; incremental?: boolean };
 export type InlineComment = { path: string; body: string; new_position?: number; old_position?: number };
-export type BotComment = { id: number; review: number; user: string; path: string; line: number; side: "LEFT" | "RIGHT"; body: string; resolved: boolean; at: string };
+export type BotComment = {
+  id: number;
+  review: number;
+  user: string;
+  path: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  body: string;
+  resolved: boolean;
+  at: string;
+};
 export type Note = { user: string; body: string; at: string; path?: string; line?: number };
 export type Thread = [BotComment, ...BotComment[]];
 
@@ -67,7 +82,19 @@ export type Git = {
   remove(checkout: Checkout): Promise<void>;
 };
 export type Agent = {
-  review(checkout: Checkout, large: boolean, open: BotComment[], conversation: Note[], signal: AbortSignal): Promise<Review>;
-  reply(checkout: Checkout, comment: string, thread: Thread | undefined, conversation: Note[], login: string): Promise<Reply>;
+  review(
+    checkout: Checkout,
+    large: boolean,
+    open: BotComment[],
+    conversation: Note[],
+    signal: AbortSignal,
+  ): Promise<Review>;
+  reply(
+    checkout: Checkout,
+    comment: string,
+    thread: Thread | undefined,
+    conversation: Note[],
+    login: string,
+  ): Promise<Reply>;
 };
 export type Adapters = { forgejo: Forgejo; git: Git; agent: Agent };

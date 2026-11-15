@@ -37,7 +37,9 @@ export function createApp(adapters: Adapters) {
     const payload = JSON.parse(body);
     const job = handle(adapters, event, payload);
     const number = payload?.number ?? payload?.issue?.number;
-    console.log(`webhook ${delivery}: ${event} ${payload?.action} ${payload?.repository?.full_name}#${number} by ${payload?.sender?.login}: ${job ? "queued" : "ignored"}`);
+    console.log(
+      `webhook ${delivery}: ${event} ${payload?.action} ${payload?.repository?.full_name}#${number} by ${payload?.sender?.login}: ${job ? "queued" : "ignored"}`,
+    );
     if (job) schedule(job);
     return c.body(null, 200);
   });
@@ -119,10 +121,19 @@ function handle(adapters: Adapters, event: string | undefined, payload: unknown)
   // Forgejo has no ready-for-review action: a draft is a title with a WIP prefix
   const undrafted = action === "edited" && /^(wip:|\[wip\])/i.test(changes?.title?.from ?? "");
   const pushed = action === "synchronized";
-  if (pull_request.draft || pull_request.state !== "open" || !(["opened", "reopened"].includes(action) || undrafted || pushed)) return;
+  if (
+    pull_request.draft ||
+    pull_request.state !== "open" ||
+    !(["opened", "reopened"].includes(action) || undrafted || pushed)
+  )
+    return;
   const pr = { owner: repository.owner.login, repo: repository.name, number };
   const { base, head, user, title, body, created_at } = pull_request;
-  const pull = { base: base.sha, head: head.sha, description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at } };
+  const pull = {
+    base: base.sha,
+    head: head.sha,
+    description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at },
+  };
   return { pr, cancellable: true, pushed, run: (signal) => review(adapters, pr, pull, pushed, signal) };
 }
 

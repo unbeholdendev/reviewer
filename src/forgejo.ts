@@ -1,13 +1,25 @@
 import { z } from "zod";
 import { FORGEJO_TOKEN, FORGEJO_URL } from "./env";
-import { type Forgejo, ForgejoCreated, ForgejoIssueComment, ForgejoPull, ForgejoReview, ForgejoReviewComment, ForgejoUser } from "./types";
+import {
+  type Forgejo,
+  ForgejoCreated,
+  ForgejoIssueComment,
+  ForgejoPull,
+  ForgejoReview,
+  ForgejoReviewComment,
+  ForgejoUser,
+} from "./types";
 
 const headers = { Authorization: `token ${FORGEJO_TOKEN}`, "Content-Type": "application/json" };
 
 async function api<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> {
   const method = body ? "POST" : "GET";
   const start = Date.now();
-  const res = await fetch(`${FORGEJO_URL}/api/v1${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`${FORGEJO_URL}/api/v1${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
   console.log(`forgejo ${method} ${path} ${res.status} ${Date.now() - start}ms`);
   if (!res.ok) throw new Error(`Forgejo ${path} ${res.status}: ${await res.text()}`);
   return schema.parse(await res.json());
@@ -22,8 +34,15 @@ export const forgejo: Forgejo = {
     await api(`/repos/${owner}/${repo}/issues/comments/${comment}/reactions`, z.unknown(), { content: "eyes" });
   },
   async pull({ owner, repo, number }) {
-    const { base, head, user, title, body, created_at } = await api(`/repos/${owner}/${repo}/pulls/${number}`, ForgejoPull);
-    return { base: base.sha, head: head.sha, description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at } };
+    const { base, head, user, title, body, created_at } = await api(
+      `/repos/${owner}/${repo}/pulls/${number}`,
+      ForgejoPull,
+    );
+    return {
+      base: base.sha,
+      head: head.sha,
+      description: { user: user?.login ?? "", body: `${title}\n\n${body}`, at: created_at },
+    };
   },
   async comment({ owner, repo, number }, body) {
     await api(`/repos/${owner}/${repo}/issues/${number}/comments`, ForgejoCreated, { body });
@@ -34,14 +53,23 @@ export const forgejo: Forgejo = {
   async reviews({ owner, repo, number }) {
     const all: z.infer<typeof ForgejoReview>[] = [];
     for (let page = 1; ; page++) {
-      const batch = await api(`/repos/${owner}/${repo}/pulls/${number}/reviews?page=${page}&limit=50`, z.array(ForgejoReview));
+      const batch = await api(
+        `/repos/${owner}/${repo}/pulls/${number}/reviews?page=${page}&limit=50`,
+        z.array(ForgejoReview),
+      );
       // page order isn't documented, and the latest marker must win
-      if (!batch.length) return all.sort((a, b) => a.id - b.id).map((r) => ({ id: r.id, user: r.user?.login ?? "", body: r.body, at: r.submitted_at }));
+      if (!batch.length)
+        return all
+          .sort((a, b) => a.id - b.id)
+          .map((r) => ({ id: r.id, user: r.user?.login ?? "", body: r.body, at: r.submitted_at }));
       all.push(...batch);
     }
   },
   async comments({ owner, repo, number }, review) {
-    const all = await api(`/repos/${owner}/${repo}/pulls/${number}/reviews/${review}/comments`, z.array(ForgejoReviewComment));
+    const all = await api(
+      `/repos/${owner}/${repo}/pulls/${number}/reviews/${review}/comments`,
+      z.array(ForgejoReviewComment),
+    );
     return all.map((c) => ({
       id: c.id,
       review,

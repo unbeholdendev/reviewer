@@ -32,38 +32,53 @@ await symlink(tmpdir(), join(dir, "escape"));
 afterAll(() => rm(dir, { recursive: true, force: true }));
 
 test("SDK replies use only read-only tools and explicitly supplied rules", async () => {
-  faux.setResponses([(context) => {
-    const tools = context.messages.flatMap((m) => m.role === "system" ? m.toolsAdded ?? [] : []);
-    expect(tools.map((t) => t.name).sort()).toEqual(["find", "grep", "ls", "read"]);
-    const text = JSON.stringify(context);
-    expect(text).toContain("base rules");
-    expect(text).toContain("Why?");
-    expect(text).not.toContain("untrusted head rules");
-    expect(text).not.toContain(process.env.FORGEJO_TOKEN!);
-    expect(text).not.toContain(process.env.PI_API_KEY!);
-    return answer();
-  }]);
+  faux.setResponses([
+    (context) => {
+      const tools = context.messages.flatMap((m) => (m.role === "system" ? (m.toolsAdded ?? []) : []));
+      expect(tools.map((t) => t.name).sort()).toEqual(["find", "grep", "ls", "read"]);
+      const text = JSON.stringify(context);
+      expect(text).toContain("base rules");
+      expect(text).toContain("Why?");
+      expect(text).not.toContain("untrusted head rules");
+      expect(text).not.toContain(process.env.FORGEJO_TOKEN!);
+      expect(text).not.toContain(process.env.PI_API_KEY!);
+      return answer();
+    },
+  ]);
   expect(await reply()).toEqual({ body: "Because." });
 });
 
 test("SDK reviews validate JSON and include incremental context and conversation", async () => {
   const review = { summary: "Fine.", recommendation: "looks-good" as const, comments: [], addressed: [] };
-  faux.setResponses([(context) => {
-    const text = JSON.stringify(context);
-    expect(text).toContain("new commits only, large PR");
-    expect(text).toContain("the diff");
-    expect(text).toContain("author context");
-    return fauxAssistantMessage(JSON.stringify(review));
-  }]);
-  expect(await agent.review(checkout, true, [], [{ user: "alice", body: "author context", at: "now" }], new AbortController().signal)).toEqual(review);
+  faux.setResponses([
+    (context) => {
+      const text = JSON.stringify(context);
+      expect(text).toContain("new commits only, large PR");
+      expect(text).toContain("the diff");
+      expect(text).toContain("author context");
+      return fauxAssistantMessage(JSON.stringify(review));
+    },
+  ]);
+  expect(
+    await agent.review(
+      checkout,
+      true,
+      [],
+      [{ user: "alice", body: "author context", at: "now" }],
+      new AbortController().signal,
+    ),
+  ).toEqual(review);
 });
 
 test("invalid output is retried once in a fresh session", async () => {
   for (const invalid of ["not JSON", '{"body":42}']) {
-    faux.setResponses([fauxAssistantMessage(invalid), (context) => {
-      expect(context.messages.filter((m) => m.role === "user")).toHaveLength(1);
-      return answer("Recovered.");
-    }]);
+    faux.setResponses([
+      fauxAssistantMessage(invalid),
+      (context) => {
+        expect(context.messages.filter((m) => m.role === "user")).toHaveLength(1);
+        return answer("Recovered.");
+      },
+    ]);
     expect(await reply()).toEqual({ body: "Recovered." });
     expect(faux.getPendingResponseCount()).toBe(0);
     faux.setResponses([fauxAssistantMessage(invalid), fauxAssistantMessage(invalid)]);
@@ -74,7 +89,10 @@ test("invalid output is retried once in a fresh session", async () => {
 
 test("provider errors and truncated responses fail rather than retry invalid output", async () => {
   for (const stopReason of ["error", "length"] as const) {
-    faux.setResponses([fauxAssistantMessage('{"body":"partial"}', { stopReason, errorMessage: "provider failed" }), answer()]);
+    faux.setResponses([
+      fauxAssistantMessage('{"body":"partial"}', { stopReason, errorMessage: "provider failed" }),
+      answer(),
+    ]);
     await expect(reply()).rejects.toThrow("provider failed");
     expect(faux.getPendingResponseCount()).toBe(1);
   }
@@ -82,15 +100,20 @@ test("provider errors and truncated responses fail rather than retry invalid out
 
 test("read-only tools can inspect files in the checkout", async () => {
   for (const [name, args] of [
-    ["read", { path: "code.ts" }], ["grep", { pattern: "value" }],
-    ["find", { pattern: "*.ts" }], ["ls", {}],
+    ["read", { path: "code.ts" }],
+    ["grep", { pattern: "value" }],
+    ["find", { pattern: "*.ts" }],
+    ["ls", {}],
   ] as const) {
-    faux.setResponses([fauxAssistantMessage(fauxToolCall(name, args)), (context) => {
-      const result = context.messages.findLast((m) => m.role === "toolResult");
-      expect(result?.role === "toolResult" && result.isError).toBe(false);
-      expect(JSON.stringify(result)).toContain(name === "read" ? "value = 42" : "code.ts");
-      return answer();
-    }]);
+    faux.setResponses([
+      fauxAssistantMessage(fauxToolCall(name, args)),
+      (context) => {
+        const result = context.messages.findLast((m) => m.role === "toolResult");
+        expect(result?.role === "toolResult" && result.isError).toBe(false);
+        expect(JSON.stringify(result)).toContain(name === "read" ? "value = 42" : "code.ts");
+        return answer();
+      },
+    ]);
     await reply();
   }
 });
@@ -98,12 +121,15 @@ test("read-only tools can inspect files in the checkout", async () => {
 test("all tools reject paths and symlinks that leave the checkout", async () => {
   for (const name of ["read", "grep", "find", "ls"]) {
     for (const path of ["..", tmpdir(), "escape"]) {
-      faux.setResponses([fauxAssistantMessage(fauxToolCall(name, { path, pattern: "*" })), (context) => {
-        const result = context.messages.findLast((m) => m.role === "toolResult");
-        expect(result?.role === "toolResult" && result.isError).toBe(true);
-        expect(JSON.stringify(result)).toContain("Path is outside the checkout");
-        return answer();
-      }]);
+      faux.setResponses([
+        fauxAssistantMessage(fauxToolCall(name, { path, pattern: "*" })),
+        (context) => {
+          const result = context.messages.findLast((m) => m.role === "toolResult");
+          expect(result?.role === "toolResult" && result.isError).toBe(true);
+          expect(JSON.stringify(result)).toContain("Path is outside the checkout");
+          return answer();
+        },
+      ]);
       await reply();
     }
   }
@@ -111,11 +137,17 @@ test("all tools reject paths and symlinks that leave the checkout", async () => 
 
 test("cancellation aborts an active SDK review without retrying", async () => {
   const controller = new AbortController();
-  faux.setResponses([async (_context, options) => {
-    controller.abort();
-    if (!options?.signal?.aborted) await new Promise<void>((resolve) => options?.signal?.addEventListener("abort", () => resolve(), { once: true }));
-    return fauxAssistantMessage("", { stopReason: "aborted" });
-  }, answer()]);
+  faux.setResponses([
+    async (_context, options) => {
+      controller.abort();
+      if (!options?.signal?.aborted)
+        await new Promise<void>((resolve) =>
+          options?.signal?.addEventListener("abort", () => resolve(), { once: true }),
+        );
+      return fauxAssistantMessage("", { stopReason: "aborted" });
+    },
+    answer(),
+  ]);
   await expect(agent.review(checkout, false, [], [], controller.signal)).rejects.toThrow();
   expect(faux.getPendingResponseCount()).toBe(1);
 });
@@ -124,10 +156,16 @@ test("the ten-minute limit aborts the SDK session", async () => {
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   const timer = spyOn(AbortSignal, "timeout").mockImplementation(() => timeout(20));
   try {
-    faux.setResponses([async (_context, options) => {
-      if (!options?.signal?.aborted) await new Promise<void>((resolve) => options?.signal?.addEventListener("abort", () => resolve(), { once: true }));
-      return fauxAssistantMessage("", { stopReason: "aborted" });
-    }, answer()]);
+    faux.setResponses([
+      async (_context, options) => {
+        if (!options?.signal?.aborted)
+          await new Promise<void>((resolve) =>
+            options?.signal?.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        return fauxAssistantMessage("", { stopReason: "aborted" });
+      },
+      answer(),
+    ]);
     await expect(reply()).rejects.toThrow();
     expect(timer).toHaveBeenCalledWith(10 * 60_000);
     expect(faux.getPendingResponseCount()).toBe(1);

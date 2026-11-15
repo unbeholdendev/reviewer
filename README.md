@@ -84,6 +84,7 @@ Needs [Bun](https://bun.sh), git, ripgrep and fd (`fd-find` on Debian). Pi is a 
 
 ```sh
 bun install
+bunx biome check .
 bunx tsc
 bun test
 bun src/server.ts

@@ -4,7 +4,10 @@ import "./harness";
 function start(change: Record<string, string | undefined>) {
   const env = { ...process.env, ...change };
   for (const name in change) if (change[name] === undefined) delete env[name];
-  const { exitCode, stdout, stderr } = Bun.spawnSync(["bun", "-e", 'import { PI_MODEL } from "./src/env"; console.log(PI_MODEL);'], { env });
+  const { exitCode, stdout, stderr } = Bun.spawnSync(
+    ["bun", "-e", 'import { PI_MODEL } from "./src/env"; console.log(PI_MODEL);'],
+    { env },
+  );
   return { exitCode, stdout: stdout.toString(), stderr: stderr.toString() };
 }
 

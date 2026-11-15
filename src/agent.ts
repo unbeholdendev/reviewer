@@ -1,10 +1,18 @@
 import { realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { InMemoryCredentialStore, type AssistantMessage } from "@earendil-works/pi-ai";
+import { type AssistantMessage, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import {
-  createAgentSession, createExtensionRuntime, createFindToolDefinition, createGrepToolDefinition,
-  createLsToolDefinition, createReadToolDefinition, ModelRuntime, SessionManager, SettingsManager,
-  type ResourceLoader, type ToolDefinition,
+  createAgentSession,
+  createExtensionRuntime,
+  createFindToolDefinition,
+  createGrepToolDefinition,
+  createLsToolDefinition,
+  createReadToolDefinition,
+  ModelRuntime,
+  type ResourceLoader,
+  SessionManager,
+  SettingsManager,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
 import { PI_API_KEY, PI_AUTH_FILE, PI_MODEL } from "./env";
@@ -15,7 +23,9 @@ const [reviewInstructions, replyInstructions] = await Promise.all([prompt("revie
 
 const modelRuntime = await ModelRuntime.create({
   credentials: PI_API_KEY ? new InMemoryCredentialStore() : undefined,
-  authPath: PI_AUTH_FILE, modelsPath: null, refreshOnCreate: false,
+  authPath: PI_AUTH_FILE,
+  modelsPath: null,
+  refreshOnCreate: false,
 });
 const slash = PI_MODEL.indexOf("/");
 const provider = PI_MODEL.slice(0, slash);
@@ -23,10 +33,18 @@ if (PI_API_KEY) await modelRuntime.setRuntimeApiKey(provider, PI_API_KEY);
 const model = modelRuntime.getModel(provider, PI_MODEL.slice(slash + 1));
 if (!model) throw new Error(`Unknown Pi model: ${PI_MODEL}`);
 if (!PI_API_KEY && (await modelRuntime.checkAuth(provider))?.type !== "oauth") {
-  throw new Error(`No Pi subscription login for ${provider} in ${PI_AUTH_FILE}. See README.md for subscription setup, or set PI_API_KEY.`);
+  throw new Error(
+    `No Pi subscription login for ${provider} in ${PI_AUTH_FILE}. See README.md for subscription setup, or set PI_API_KEY.`,
+  );
 }
 
-async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?: AbortSignal, retry = true): Promise<T> {
+async function run<T>(
+  dir: string,
+  prompt: string,
+  schema: z.ZodType<T>,
+  signal?: AbortSignal,
+  retry = true,
+): Promise<T> {
   const start = Date.now();
   const format = `Return only a JSON object matching this schema, without Markdown fences or other text:\n${JSON.stringify(z.toJSONSchema(schema, { target: "draft-7" }))}`;
   signal?.throwIfAborted();
@@ -44,18 +62,24 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
     extendResources: () => {},
     reload: async () => {},
   };
+  // biome-ignore lint/suspicious/noExplicitAny: Pi's tools have different schemas, and Pi types a mixed list as ToolDefinition<any, any>
   const definitions: ToolDefinition<any, any>[] = [
-    createReadToolDefinition(dir), createGrepToolDefinition(dir),
-    createFindToolDefinition(dir), createLsToolDefinition(dir),
+    createReadToolDefinition(dir),
+    createGrepToolDefinition(dir),
+    createFindToolDefinition(dir),
+    createLsToolDefinition(dir),
   ];
   const { session } = await createAgentSession({
-    cwd: dir, model, modelRuntime, resourceLoader,
+    cwd: dir,
+    model,
+    modelRuntime,
+    resourceLoader,
     sessionManager: SessionManager.inMemory(dir),
     settingsManager: SettingsManager.inMemory({ enableInstallTelemetry: false }),
     tools: definitions.map((tool) => tool.name),
-    customTools: definitions.map((tool): ToolDefinition<any, any> => ({
+    customTools: definitions.map((tool): typeof tool => ({
       ...tool,
-      async execute(id, params: any, signal, onUpdate, ctx) {
+      async execute(id, params: { path?: string }, signal, onUpdate, ctx) {
         const path = await realpath(resolve(dir, params.path ?? "."));
         if (path !== dir && !path.startsWith(dir + sep)) throw new Error("Path is outside the checkout");
         return tool.execute(id, { ...params, path }, signal, onUpdate, ctx);
@@ -63,7 +87,9 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
     })),
   });
   const cancellation = AbortSignal.any([AbortSignal.timeout(10 * 60_000), ...(signal ? [signal] : [])]);
-  const abort = () => { void session.abort(); };
+  const abort = () => {
+    void session.abort();
+  };
   cancellation.addEventListener("abort", abort, { once: true });
   let out: string;
   let last: AssistantMessage | undefined;
@@ -75,7 +101,8 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
     console.log(`pi started in ${dir}, prompt ${prompt.length} chars`);
     await session.prompt(`${prompt}\n\n${format}`);
     cancellation.throwIfAborted();
-    if (!last || last.stopReason !== "stop") throw new Error(last?.errorMessage || `Pi stopped: ${last?.stopReason ?? "no response"}`);
+    if (last?.stopReason !== "stop")
+      throw new Error(last?.errorMessage || `Pi stopped: ${last?.stopReason ?? "no response"}`);
     out = session.getLastAssistantText() ?? "";
   } finally {
     cancellation.removeEventListener("abort", abort);
@@ -83,7 +110,9 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
     session.dispose();
   }
   let json: unknown;
-  try { json = JSON.parse(out); } catch {}
+  try {
+    json = JSON.parse(out);
+  } catch {}
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     if (!retry) throw new Error(`pi returned no valid output: ${out}`);
@@ -94,16 +123,30 @@ async function run<T>(dir: string, prompt: string, schema: z.ZodType<T>, signal?
   return parsed.data;
 }
 
-const notes = (conversation: Note[]) => conversation.map(({ user, path, line, body }) => `- ${JSON.stringify({ user, path, line, body })}`).join("\n");
+const notes = (conversation: Note[]) =>
+  conversation.map(({ user, path, line, body }) => `- ${JSON.stringify({ user, path, line, body })}`).join("\n");
 
 export const agent: Agent = {
   review({ dir, diff, log, rules, incremental }, large, open, conversation, signal) {
-    const comments = open.map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`).join("\n");
+    const comments = open
+      .map((c) => `- ${JSON.stringify({ id: c.id, path: c.path, line: c.line, side: c.side, body: c.body })}`)
+      .join("\n");
     const heading = [incremental && "new commits only", large && "large PR"].filter(Boolean).join(", ");
-    return run(dir, `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`, Review, signal);
+    return run(
+      dir,
+      `${reviewInstructions}\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Your open comments\n\n${comments || "None."}\n\n## Commits\n\n${log}\n\n## Diff${heading && ` (${heading})`}\n\n${diff}`,
+      Review,
+      signal,
+    );
   },
   reply({ dir, diff, log, rules }, comment, thread, conversation, login) {
-    const history = thread ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n` : "";
-    return run(dir, `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`, Reply);
+    const history = thread
+      ? `## Thread on \`${thread[0].path}:${thread[0].line}\`\n\n${thread.map((c) => `- ${JSON.stringify({ user: c.user, body: c.body })}`).join("\n")}\n\n`
+      : "";
+    return run(
+      dir,
+      `${replyInstructions}\nYou are @${login}. Comments by \`${login}\` are yours.\n\n## Repository rules\n\n${rules || "None."}\n\n## Conversation\n\n${notes(conversation)}\n\n## Commits\n\n${log}\n\n## Diff\n\n${diff}\n\n${history}## Comment\n\n${comment}`,
+      Reply,
+    );
   },
 };

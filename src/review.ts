@@ -4,7 +4,14 @@ import type { Adapters, BotComment, Comment, Forgejo, Note, PR, Pull, Thread } f
 const largePR = 3000;
 const fixReply = /^Fixed in \w+\.\n\n<!-- reviewer:fixed=(\d+) -->$/;
 
-export async function review(adapters: Adapters, pr: PR, pull: Pull, pushed: boolean, signal: AbortSignal, comment?: number) {
+export async function review(
+  adapters: Adapters,
+  pr: PR,
+  pull: Pull,
+  pushed: boolean,
+  signal: AbortSignal,
+  comment?: number,
+) {
   if (signal.aborted) return;
   try {
     await run(adapters, pr, pull, pushed, signal, comment);
@@ -19,7 +26,14 @@ export async function review(adapters: Adapters, pr: PR, pull: Pull, pushed: boo
   }
 }
 
-async function run({ forgejo, git, agent }: Adapters, pr: PR, { base, head, description }: Pull, pushed: boolean, signal: AbortSignal, comment?: number) {
+async function run(
+  { forgejo, git, agent }: Adapters,
+  pr: PR,
+  { base, head, description }: Pull,
+  pushed: boolean,
+  signal: AbortSignal,
+  comment?: number,
+) {
   try {
     await (comment ? forgejo.reactComment(pr, comment) : forgejo.react(pr));
   } catch (e) {
@@ -36,23 +50,46 @@ async function run({ forgejo, git, agent }: Adapters, pr: PR, { base, head, desc
     const diff = withoutSkipped(checkout.diff);
     const changed = changedLines(diff);
     const large = changed > largePR;
-    console.log(`${key(pr)}: reviewing ${checkout.incremental ? `since ${since}` : "full diff"}, ${changed} changed lines, ${open.length} open comments`);
-    const { summary, recommendation, comments: all, addressed } = await agent.review({ ...checkout, diff }, large, open, conversation(description, notes, reviews, threads), signal);
+    console.log(
+      `${key(pr)}: reviewing ${checkout.incremental ? `since ${since}` : "full diff"}, ${changed} changed lines, ${open.length} open comments`,
+    );
+    const {
+      summary,
+      recommendation,
+      comments: all,
+      addressed,
+    } = await agent.review(
+      { ...checkout, diff },
+      large,
+      open,
+      conversation(description, notes, reviews, threads),
+      signal,
+    );
     const comments = all.filter((c) => !skipped(c.path));
     const lines = anchorable(diff);
     // Forgejo numbers removed lines against the PR base, not the last reviewed SHA
-    const inline = comments.filter((c) => lines.has(`${c.side} ${c.path}:${c.line}`) && !(checkout.incremental && c.side === "LEFT"));
+    const inline = comments.filter(
+      (c) => lines.has(`${c.side} ${c.path}:${c.line}`) && !(checkout.incremental && c.side === "LEFT"),
+    );
     const outside = comments.filter((c) => !inline.includes(c));
     let body = `**Recommendation:** ${recommendation}\n\n${summary}`;
-    if (large) body += `\n\n_Partial review: this PR has ${changed} changed lines, so only the key files were reviewed._`;
-    if (outside.length) body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` ${label(c)}`).join("\n")}`;
+    if (large)
+      body += `\n\n_Partial review: this PR has ${changed} changed lines, so only the key files were reviewed._`;
+    if (outside.length)
+      body += `\n\n**Outside the diff:**\n\n${outside.map((c) => `- \`${c.path}:${c.line}\` ${label(c)}`).join("\n")}`;
     body += `\n\n<!-- reviewer:sha=${head} -->`;
-    console.log(`${key(pr)}: ${recommendation}, ${inline.length} inline, ${outside.length} outside the diff, ${all.length - comments.length} on skipped files, ${addressed.length} addressed`);
+    console.log(
+      `${key(pr)}: ${recommendation}, ${inline.length} inline, ${outside.length} outside the diff, ${all.length - comments.length} on skipped files, ${addressed.length} addressed`,
+    );
     if (signal.aborted) return;
     await forgejo.createReview(pr, {
       event: "COMMENT",
       body,
-      comments: inline.map((c) => ({ path: c.path, [c.side === "RIGHT" ? "new_position" : "old_position"]: c.line, body: label(c) })),
+      comments: inline.map((c) => ({
+        path: c.path,
+        [c.side === "RIGHT" ? "new_position" : "old_position"]: c.line,
+        body: label(c),
+      })),
     });
     for (const c of open) {
       const fix = addressed.find((a) => a.commentId === c.id && checkout.log.includes(a.sha));
@@ -63,7 +100,12 @@ async function run({ forgejo, git, agent }: Adapters, pr: PR, { base, head, desc
   }
 }
 
-export async function reply({ forgejo, git, agent }: Adapters, pr: PR, comment: { id: number; body: string }, mentioned: boolean) {
+export async function reply(
+  { forgejo, git, agent }: Adapters,
+  pr: PR,
+  comment: { id: number; body: string },
+  mentioned: boolean,
+) {
   const reviews = await forgejo.reviews(pr);
   const mine = reviews.filter((r) => r.user === forgejo.login);
   // Forgejo files a thread reply under the review that started the thread
@@ -79,12 +121,22 @@ export async function reply({ forgejo, git, agent }: Adapters, pr: PR, comment: 
   const [{ base, head, description }, notes, theirs] = await Promise.all([
     forgejo.pull(pr),
     forgejo.issueComments(pr),
-    inlineComments(forgejo, pr, reviews.filter((r) => !mine.includes(r))),
+    inlineComments(
+      forgejo,
+      pr,
+      reviews.filter((r) => !mine.includes(r)),
+    ),
   ]);
   const checkout = await git.checkout(pr, base, head);
   try {
     const history = conversation(description, notes, reviews, ours, theirs);
-    const { body } = await agent.reply({ ...checkout, diff: withoutSkipped(checkout.diff) }, comment.body, thread, history, forgejo.login);
+    const { body } = await agent.reply(
+      { ...checkout, diff: withoutSkipped(checkout.diff) },
+      comment.body,
+      thread,
+      history,
+      forgejo.login,
+    );
     await (thread ? forgejo.reply(pr, thread[0], body) : forgejo.comment(pr, body));
   } finally {
     await git.remove(checkout);
@@ -110,7 +162,10 @@ function conversation(description: Note, ...notes: Note[][]) {
 function openComments(login: string, all: BotComment[]) {
   const bot = all.filter((c) => c.user === login);
   const fixed = new Set(bot.map((c) => Number(c.body.match(fixReply)?.[1])));
-  return bot.filter((c) => !c.resolved && !fixed.has(c.id) && !fixReply.test(c.body) && !all.some((o) => o.id < c.id && sameThread(o, c)));
+  return bot.filter(
+    (c) =>
+      !c.resolved && !fixed.has(c.id) && !fixReply.test(c.body) && !all.some((o) => o.id < c.id && sameThread(o, c)),
+  );
 }
 
 function botThread(login: string, comments: BotComment[], id: number): Thread | undefined {

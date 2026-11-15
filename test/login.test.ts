@@ -38,16 +38,27 @@ const script = `
 `;
 
 async function login(dir: string, input?: string, key = "") {
-  const env = { ...process.env, PI_MODEL: "openai/gpt-6.1-sol", PI_AUTH_FILE: join(dir, "auth.json"), PI_API_KEY: key, TEST_TTY: input === undefined ? "" : "1" };
+  const env = {
+    ...process.env,
+    PI_MODEL: "openai/gpt-6.1-sol",
+    PI_AUTH_FILE: join(dir, "auth.json"),
+    PI_API_KEY: key,
+    TEST_TTY: input === undefined ? "" : "1",
+  };
   const proc = Bun.spawn([process.execPath, "-e", script], {
-    env, stdin: "pipe", stdout: "pipe", stderr: "pipe",
+    env,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
   });
   if (input !== undefined) proc.stdin.write(input);
   const [stdout, stderr, code] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
   return { stdout, stderr, code };
 }
 
-const credential = (expires: number, refresh = "old-refresh") => ({ openai: { type: "oauth", access: "old-access", refresh, expires } });
+const credential = (expires: number, refresh = "old-refresh") => ({
+  openai: { type: "oauth", access: "old-access", refresh, expires },
+});
 
 test("deployment reuses saved credentials and refreshes expired ones without a terminal", async () => {
   const dir = await mkdtemp(join(tmpdir(), "reviewer-login-saved-"));
@@ -60,7 +71,9 @@ test("deployment reuses saved credentials and refreshes expired ones without a t
       expect((await Bun.file(join(dir, "auth.json")).json()).openai.access).toBe(expires ? "old-access" : "new-access");
       expect(await Bun.file(join(dir, "device-id")).exists()).toBe(false);
     }
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("deployment prompts for missing or revoked logins and keeps the installation ID", async () => {
@@ -78,7 +91,9 @@ test("deployment prompts for missing or revoked logins and keeps the installatio
     expect({ code: second.code, stderr: second.stderr }).toEqual({ code: 0, stderr: "" });
     expect(second.stdout).toContain("sign in again");
     expect((await Bun.file(join(dir, "auth.json")).json()).openai.deviceId).toBe(id);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("a missing login fails clearly without a terminal, and a cancelled login fails", async () => {
@@ -91,7 +106,9 @@ test("a missing login fails clearly without a terminal, and a cancelled login fa
     expect(cancelled.code).not.toBe(0);
     expect(cancelled.stderr).toContain("Login cancelled");
     expect((await Bun.file(join(dir, "auth.json")).json()).openai).toBeUndefined();
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("an explicit API key skips subscription setup and does not create credential files", async () => {
@@ -101,21 +118,37 @@ test("an explicit API key skips subscription setup and does not create credentia
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("skipping subscription login");
     expect(await Bun.file(join(dir, "auth.json")).exists()).toBe(false);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("deployment pulls or builds, checks login, then starts; failures never start the service", async () => {
   const dir = await mkdtemp(join(tmpdir(), "reviewer-deploy-test-"));
   try {
     await Bun.write(join(dir, "deploy.sh"), await Bun.file(deployPath).text());
-    await Bun.write(join(dir, "docker"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nif [ "$*" = "$FAIL_COMMAND" ]; then exit 17; fi\n');
+    await Bun.write(
+      join(dir, "docker"),
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nif [ "$*" = "$FAIL_COMMAND" ]; then exit 17; fi\n',
+    );
     await chmod(join(dir, "docker"), 0o755);
-    const calls = ["compose pull --ignore-buildable reviewer", "compose build reviewer", "compose run --rm reviewer bun src/login.ts", "compose up -d"];
+    const calls = [
+      "compose pull --ignore-buildable reviewer",
+      "compose build reviewer",
+      "compose run --rm reviewer bun src/login.ts",
+      "compose up -d",
+    ];
     for (const fail of ["", calls[0]!, calls[1]!, calls[2]!]) {
       await Bun.write(join(dir, "calls"), "");
-      const proc = Bun.spawn(["sh", join(dir, "deploy.sh")], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CALLS: join(dir, "calls"), FAIL_COMMAND: fail } });
+      const proc = Bun.spawn(["sh", join(dir, "deploy.sh")], {
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, CALLS: join(dir, "calls"), FAIL_COMMAND: fail },
+      });
       expect(await proc.exited).toBe(fail ? 17 : 0);
-      expect((await Bun.file(join(dir, "calls")).text()).trim().split("\n")).toEqual(fail ? calls.slice(0, calls.indexOf(fail) + 1) : calls);
+      expect((await Bun.file(join(dir, "calls")).text()).trim().split("\n")).toEqual(
+        fail ? calls.slice(0, calls.indexOf(fail) + 1) : calls,
+      );
     }
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
